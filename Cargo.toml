@@ -1,0 +1,30 @@
+[package]
+name = "game_mon"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+windows-win = "2.4.1"
+sysinfo = "0.26.2"
+native-dialog = "0.6.3"
+rust-ini = "0.18.0"
+simpleini = "0.1.2"
+active-win-pos-rs = "0.7.0"
+execute = "0.2.11"
+chrono = "0.4.22"
+reqwest = "0.11"
+futures = "0.3.24"
+tokio = { version = "1.21.1", features = ["full"] }
+tray-item = "0.7.1"
+winreg = "0.10"
+user-idle = "0.5.2"
+
+[build-dependencies]
+windres = "*"
+winres = "0.1"
+
+[features]
+console = []

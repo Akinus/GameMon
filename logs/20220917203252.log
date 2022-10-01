@@ -1,0 +1,10 @@
+"20220917202726": INFO: Log Initialized. GameMon started...
+"20220917202727": DEBUG: "signalrgb://effect/apply/Rainbow%20Rise?-silentlaunch-"
+"20220917202732": DEBUG: "http://127.0.0.1:6742/General"
+"20220917202732": INFO: "Opera no longer detected! Changed SignalRGB to Rainbow Rise. \"Changed OpenRGB to \\\"General\\\"\""
+"20220917202749": DEBUG: "signalrgb://effect/apply/Pinwheel?speed=1^&lineThickness=3^&background=%23150720^&pinwheelColor=%238bff3c^&-silentlaunch-"
+"20220917202754": DEBUG: "http://127.0.0.1:6742/Opera"
+"20220917202754": INFO: "Opera detected! Changed SignalRGB to Pinwheel?speed=1&lineThickness=3&background=%23150720&pinwheelColor=%238bff3c. \"Changed OpenRGB to \\\"Opera\\\"\""
+"20220917202800": DEBUG: "signalrgb://effect/apply/Rainbow%20Rise?-silentlaunch-"
+"20220917202805": DEBUG: "http://127.0.0.1:6742/General"
+"20220917202805": INFO: "Opera no longer detected! Changed SignalRGB to Rainbow Rise. \"Changed OpenRGB to \\\"General\\\"\""
