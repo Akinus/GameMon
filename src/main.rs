@@ -513,13 +513,6 @@ async fn main() {
     initialize_log();
     let _cleanup = Cleanup;
     
-    // let window_msg = windows_win::raw::window::send_message(unsafe { GetDesktopWindow() }, 0x0112, 0xF170, 2, Some(5));
-    // match window_msg {
-    //     Ok(o) => ExitApp(Some(1), "Ok" ),
-    //     Err(e) => ExitApp(Some(1), "Error" ),
-    // };
-
-
     let mut tray = TrayItem::new("GameMon", "my-icon-name").unwrap();
 
     tray.add_label("GameMon").unwrap();
@@ -583,14 +576,6 @@ async fn main() {
                             //log
 
 
-                            // let win = window_reaction(sec.unwrap().to_string()).await;
-                            // match win {
-                            //     Ok(result) => {
-                            //         log("i", &format!("{}", result));
-                            //         sleep(500);   
-                            //     },
-                            //     Err(_) => continue
-                            // };
                         },
                         "Game" => {
                             // let game = game_reaction(sec.unwrap().to_string()).await;
@@ -631,5 +616,4 @@ async fn main() {
 
         sleep(500)
     }
-    // exit_app(Some(0), &"Loop broken, shutting down.");
 }
