@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 14:34:04                          #
+// Last Modified: Sat, 10 Dec 2022 @ 15:57:50                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -110,6 +110,8 @@ fn main() {
     }
 
     // Create system tray
+    let (tx, rx) = mpsc::channel();
+
     let mut tray = TrayItem::new("GameMon", "my-icon-name").unwrap();
 
     tray.add_label("GameMon").unwrap();
@@ -122,7 +124,6 @@ fn main() {
     })
     .unwrap();
     
-    let (tx, rx) = mpsc::channel();
     let txc = tx.clone();
     
     tray.add_menu_item("View Logs", move || {
@@ -204,8 +205,6 @@ fn main() {
                 Err(_) => break 'channel,
             };
         }
-
-        // Game and Window Reactions
         defaults = get_defaults();
 
         hklm = RegKey::predef(HKEY_LOCAL_MACHINE);

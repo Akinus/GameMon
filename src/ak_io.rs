@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 14:20:02                          #
+// Last Modified: Sat, 10 Dec 2022 @ 15:59:14                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -338,6 +338,7 @@ pub mod write {
     };
 
     use winreg::{RegKey, enums::{HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER, RegDisposition::{REG_CREATED_NEW_KEY, REG_OPENED_EXISTING_KEY}}};
+
 
     pub fn write_key(sec_name: &String, key_name: &'static str, key_value: &str){
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);

@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 13:57:58                          #
+// Last Modified: Sat, 10 Dec 2022 @ 15:59:30                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -98,6 +98,60 @@ pub fn get_ahk_pid(sec: &String) -> Result<u32, String> {
     
     return Err("NONE".to_string())
 }
+
+// pub fn change_rgb(section: &str) {
+//     let srgb = match section {
+//         "night" => get_value("defaults".to_string(), "night_hour_srgb_profile".to_string()),
+//         "screensaver" => get_value("defaults".to_string(), "screensaver_srgb_profile".to_string()),
+//         _ => get_value(section.to_owned(), "signal_rgbprofile".to_string())
+//     };
+//     let mut rgb_profile = url_encode(srgb.to_string());
+
+//     if rgb_profile.contains("?"){
+//         rgb_profile.push_str("^&-silentlaunch-");
+//     } else {
+//         rgb_profile.push_str("?-silentlaunch-");
+//     }
+    
+//     let command_var = format!("start signalrgb://effect/apply/{}", &rgb_profile);
+  
+//     let output = run_cmd(&command_var);
+//     match output {
+//         Err(e) => {
+//             log!(format!("Could not execute SignalRGB Command: {}: {:?}", &command_var, e), "e");
+//         },
+//         Ok(_) => {
+//             log!(format!("Changed SignalRGB to {}", &srgb));
+//         }
+//     };
+
+//     let orgb = match section {
+//         "night" => get_value("defaults".to_string(), "night_hour_orgb_profile".to_string()),
+//         "screensaver" => get_value("defaults".to_string(), "screensaver_orgb_profile".to_string()),
+//         _ => get_value(section.to_owned(), "open_rgbprofile".to_string())
+//     };
+
+//     let rgb_profile = url_encode(orgb.to_string());
+//     let addy = get_value("defaults".to_string(), "orgb_address".to_string());
+//     let port = get_value("defaults".to_string(), "orgb_port".to_string());
+//     let command_var = format!("http://{}:{}/{}", addy, port, &rgb_profile);
+
+//     match ureq::post(&command_var)
+//         .set("User-Agent",
+//             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36")
+//         .set("Content-Type", "application/json")
+//         .send_string(&format!("Requesting Change OpenRGB profile to {}", &rgb_profile)) {
+//             Ok(o) => {
+//                 log!(format!("Changed OpenRGB to {}\n\nResponse:\nCode: {}\nContent: {}\n Url: {}", 
+//                 &rgb_profile, o.status(), o.status_text(), o.get_url()));
+//             }
+//             Err(e) => {
+//                 log!(format!("ERROR: {}", e), "e");
+//             }
+//         }
+
+
+// }
 
 pub fn change_signal_rgb(profile: &String) -> String{
     let sp = &profile;
