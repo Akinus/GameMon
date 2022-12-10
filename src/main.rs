@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 14:18:24                          #
+// Last Modified: Sat, 10 Dec 2022 @ 14:34:04                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -185,23 +185,25 @@ fn main() {
             _ => ()
         }
 
-        match rx.try_recv(){
-            Ok(Message::Quit) => exit_app!(1, "Menu"),
-            Ok(Message::Gui) => {
-                std::thread::spawn(|| {
-                    main_gui();
-                });
-            },
-            Ok(Message::Defaults) => {
-                std::thread::spawn(||{
-                    defaults_gui();
-                });
-            },
-            Ok(Message::Logs) => {
-                let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
-            },
-            _ => ()
-        };
+        'channel: loop {
+            match rx.try_recv(){
+                Ok(Message::Quit) => exit_app!(1, "Menu"),
+                Ok(Message::Gui) => {
+                    std::thread::spawn(|| {
+                        main_gui();
+                    });
+                },
+                Ok(Message::Defaults) => {
+                    std::thread::spawn(||{
+                        defaults_gui();
+                    });
+                },
+                Ok(Message::Logs) => {
+                    let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
+                },
+                Err(_) => break 'channel,
+            };
+        }
 
         // Game and Window Reactions
         defaults = get_defaults();
