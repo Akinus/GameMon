@@ -5,13 +5,13 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 01 Oct 2022 @ 11:10:35                          #
+// Last Modified: Sat, 01 Oct 2022 @ 15:12:38                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
 // ----------	---	-------------------------------------------------- #
 // #####################################################################
-
+#![allow(dead_code, unused_variables, unreachable_code)]
 #![cfg_attr(
     all(
       target_os = "windows",
@@ -46,13 +46,13 @@ enum Message {
 
 #[derive(Debug)]
 struct Instance {
-    exeName: String,
-    gameWindowName: String,
-    nameOfahk: String,
-    pathToahk: String,
-    OpenRGBprofile: String,
-    SignalRGBprofile: String,
-    voiceAttackProfile: String,
+    exe_name: String,
+    game_window_name: String,
+    name_ofahk: String,
+    path_toahk: String,
+    open_rgbprofile: String,
+    signal_rgbprofile: String,
+    voice_attack_profile: String,
     game_or_win: String,
     running_pid: String,
     running: String
@@ -70,7 +70,7 @@ impl Drop for Cleanup {
 async fn game_reaction(section_name: String)-> Result<String, String>{
     let exe = match &section_name.as_str() {
         &"Screensaver" => Path::new(& screensaver().await).file_name().unwrap().to_str().unwrap().to_string(),
-        _ => get_key(&section_name, "exeName")
+        _ => get_key(&section_name, "exeName").to_string()
     };
 
     // println!("Checking for {}", &exe);
@@ -127,99 +127,6 @@ async fn window_reaction(section_name: String) -> Result<String, String>{
     };
     record_win_pid(&win_pid, &section_name);
 
-    
-    // println!("{:?}", exe_name);
-    let fore_win_pid: String = get_active_window().unwrap().process_id.to_string();
-    let comp_win_pid = get_key(&section_name, "running_pid");
-    
-    if fore_win_pid == comp_win_pid {
-        if get_key(&section_name, "running") == "True" {
-            return Err(format!("{} is already running", &section_name))
-        }
-        let signal_result = change_signal_rgb(&section_name);
-        let open_result = change_open_rgb(&section_name);
-        write_key(&section_name, "running", "True");
-        write_key(&"General".to_string(), "running", "False");
-        return Ok(format!("{} detected! {}. {}", &section_name, &signal_result, &open_result.await));
-    } else {
-        if get_key(&"General".to_string(), "running") == "True"{
-            return Err("General is already running".to_string());
-        }
-        if get_key(&section_name, "running") == "True" {
-            let general_name = &"General".to_string();
-            let signal_result = change_signal_rgb(&general_name);
-            let open_result = change_open_rgb(&general_name);
-            write_key(&general_name, "running", "True");
-            write_key(&section_name, "running", "False");
-            // game_reaction("Screensaver".to_string()).await.unwrap();
-            return Ok(format!("{} no longer detected! {}. {}", &section_name, &signal_result, &open_result.await));
-        };
-        return Err("None".to_string())
-    }
-    // println!("Foreground window is: {:?}\nCompare window is: {:?}", fore_win_pid, comp_win_pid);
-}
-
-// Idle Reaction
-async fn idle() -> Result<String, String>{
-    let idle_wait = get_key(&"Idle".to_string(), "exeName");
-    let idle_time = UserIdle::get_time().unwrap();
-    let idle_seconds = idle_time.as_seconds();
-    let section_name: String = "Idle".to_string();
-    let time_of_day = Local::now().time();
-    let time_string = get_key(&"Idle".to_string(), "gameWindowName");
-    let time_range = time_string.split("-").collect::<Vec<&str>>();
-    let start_time = NaiveTime::parse_from_str(time_range[0], "%H%M").unwrap();
-    let end_time = NaiveTime::parse_from_str(time_range[1], "%H%M").unwrap();
-    // log("d", &format!("Start Time: {:?}. End Time: {:?}. Time Now: {}", start_time, end_time, time_of_day));
-    // ExitApp(Some(1), "Test");
-
-    match idle_seconds.cmp(&idle_wait.parse::<u64>().unwrap()){
-        Ordering::Greater => {
-            if get_key(&section_name, "running") == "True" {
-                return Err("Idle is already running".to_string());
-            }
-            write_key(&"defaults".to_string(), "gameon", "True");
-            write_key(&section_name, "running", "True");
-            write_key(&"General".to_string(), "running", "False");
-            
-            if (time_of_day > start_time) && (time_of_day < end_time) {
-                let signal_result = change_signal_rgb(&section_name);
-                let open_result = change_open_rgb(&section_name);
-               
-                return Ok(format!("{} detected during night hours! {}. {}", &section_name, &signal_result, &open_result.await));
-            } else {
-                let ss = screensaver().await;
-                Command::new("cmd.exe")
-                .creation_flags(CREATE_NO_WINDOW)
-                .arg("/C")
-                .arg(&ss)
-                .arg("/S")
-                .spawn().unwrap();
-                return Ok(format!("{} detected during day hours! Running Screensaver. ", &section_name));
-            };
-
-        },
-        _ => {
-            if get_key(&"General".to_string(), "running") == "True"{
-                return Err("General is already running".to_string());
-            };
-            write_key(&"defaults".to_string(), "gameon", "False");
-            if get_key(&section_name, "running") == "True" {
-                let general_name = &"General".to_string();
-                let signal_result = change_signal_rgb(&general_name);
-                let open_result = change_open_rgb(&general_name);
-                write_key(&general_name, "running", "True");
-                write_key(&section_name, "running", "False");
-                write_key(&"Screensaver".to_string(), "running", "False");
-                return Ok(format!("{} no longer detected! {}. {}", &section_name, &signal_result, &open_result.await));
-            };   
-        }
-    };  
-
-    return Err("None".to_string())
-}
-
-// Screensaver reaction
 async fn screensaver() -> String{
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let desktop = hkcu.open_subkey("Control Panel\\Desktop").unwrap();
@@ -230,7 +137,7 @@ async fn screensaver() -> String{
 // Change Signal RGB
 fn change_signal_rgb(sec_name: &String) -> String{
     let sp = get_key(&sec_name, "SignalRGBprofile");
-    let mut rgb_profile = url_encode(get_key(&sec_name, "SignalRGBprofile"));
+    let mut rgb_profile = url_encode(get_key(&sec_name, "SignalRGBprofile").to_string());
 
     if rgb_profile.contains("?"){
         rgb_profile.push_str("^&-silentlaunch-");
@@ -254,7 +161,7 @@ async fn change_open_rgb(sec_name: &String) -> String {
     let addy = get_key(&"defaults".to_string(), "orgb_address");
     let port = get_key(&"defaults".to_string(), "orgb_port");
     let sp = get_key(&sec_name, "OpenRGBprofile");
-    let rgb_profile = url_encode(get_key(&sec_name, "OpenRGBprofile"));
+    let rgb_profile = url_encode(get_key(&sec_name, "OpenRGBprofile").to_string());
     let command_var = format!("http://{}:{}/{}", addy, port, &rgb_profile);
     
     let mut headers = reqwest::header::HeaderMap::new();
@@ -281,11 +188,6 @@ async fn change_open_rgb(sec_name: &String) -> String {
     return return_var.to_string();
 }
 
-// Run Extra Commands
-
-// GUI
-
-// Extra Functions
 fn sleep(milliseconds: u64){
     let mills = std::time::Duration::from_millis(milliseconds);
     let now = std::time::Instant::now();
@@ -336,13 +238,13 @@ fn initialize_log(){
         let e = std::path::Path::new(&log_file).exists();
         match e {
             true => {
-                std::fs::write(&log_archive, format!("{:?}: NEW_ARCHIVE", &now)).expect(&format!("Could not create new log archived file!! {:?}", &log_archive));
+                std::fs::write(&log_archive, format!("{}: NEW_ARCHIVE", &now)).expect(&format!("Could not create new log archived file!! {:?}", &log_archive));
                 std::fs::copy(&log_file, &log_archive).expect("Could not copy log file to archive!");
                 std::fs::remove_file(&log_file).expect("Could not delete existing log!");
-                std::fs::write(&log_file, format!("{:?}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
             }
             false => {
-                std::fs::write(&log_file, format!("{:?}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
             }
         }
     } else {
@@ -350,14 +252,14 @@ fn initialize_log(){
         let e = std::path::Path::new(&log_file).exists();
         match e {
             true => {
-                std::fs::write(&log_archive, format!("{:?}: NEW_ARCHIVE", &now)).expect(&format!("Could not create new log archived file!! {:?}", &log_archive));
+                std::fs::write(&log_archive, format!("{}: NEW_ARCHIVE", &now)).expect(&format!("Could not create new log archived file!! {:?}", &log_archive));
                 std::fs::copy(&log_file, &log_archive).expect("Could not copy log file to archive!");
                 std::fs::remove_file(&log_file).expect("Could not delete existing log!");
-                std::fs::write(&log_file, format!("{:?}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
                 
             }
             false => {
-                std::fs::write(&log_file, format!("{:?}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
             }
         }
     }
@@ -370,16 +272,16 @@ fn log(log_type: &'static str, log_text: &String) {
     log_file.push_str("\\gamemon.log");
     
     if log_type == "i" {
-        let data = format!("{:#?}: INFO: {:#?}", &now, &log_text);
+        let data = format!("{}: INFO: {}", &now, &log_text);
         append_log(&data);
     } else if log_type == "d" {
-        let data = format!("{:#?}: DEBUG: {:#?}", &now, &log_text);
+        let data = format!("{}: DEBUG: {}", &now, &log_text);
         append_log(&data);
     } else if log_type == "w" {
-        let data = format!("{:#?}: WARNING: {:#?}", &now, &log_text);
+        let data = format!("{}: WARNING: {}", &now, &log_text);
         append_log(&data);
     } else if log_type == "e"{
-        let data = format!("{:#?}: ERROR: {:#?}", &now, &log_text);
+        let data = format!("{}: ERROR: {}", &now, &log_text);
         append_log(&data);
     }
 
@@ -393,9 +295,8 @@ fn append_log(data: &String){
         .append(true)
         .open(&log_file)
         .unwrap();
-    if let Err(e) = writeln!(lfile, "{}", data) {
-        eprintln!("Couldn't write to file: {}", e);
-    };
+    write!(lfile, "{}", format!("{data}\n")).unwrap();
+    
 }
 
 fn timestamp() -> String {
@@ -417,47 +318,47 @@ fn debug_break(){
     log("d", &"BREAK BREAK BREAK".to_string());
 }
 
-fn win_pid_by_process(pname: &str) ->  Result<u32, String>{
-    let run_pid =get_pid(Some(pname)).unwrap();
-    
-    if &run_pid == "()" {
-        log("d", &format!("PID: {} found for {}", &run_pid, &pname).to_string());
-        return Err(format!("No process found with name: {}", &pname));
-    } else {
-        return Ok(run_pid.parse::<u32>().unwrap());
-    }
-
-    return Err("None".to_string());
-}
-
 fn record_win_pid(pid: &u32, section_header: &String){
     write_key(section_header, "running_pid", &pid.to_string());
     
 }
 
-fn get_pid(pname: Option<&str>) -> Result<String, String>{
+fn get_pid(pname: Option<&str>) -> Result<String, String, String>{
     match pname {
         Some(i) => {
-            let s = System::new_all(); 
-            for process in s.process_by_exact_name(i) {
-                
-                let ox = process.parent().unwrap().to_string();
-                return Ok(ox.parse::<u32>().unwrap().to_string());
+            
+            let s = System::new_all();
+            let procs = s.processes_by_exact_name(i);
+            
+            match Some(procs) {
+                Some(p) => {
+                    
+                    for process in p {
+                        
+                        let ox = process.parent().unwrap().to_string();
+                        return Ok(ox.parse::<u32>().unwrap().to_string());
+                    };
+ 
+                },
+                None => {
+                    return None
+                }
             };
+            
         },
-        None => return Err("NULL".to_string())
+        None => return None
     }
     return Err("NULL".to_string());
 }
 
-fn game_process(pname: &str) -> Result<String, String>{
+fn game_process(pname: &str) -> Result<String, String, String>{
     let s = System::new_all();
 
     for process in s.processes_by_exact_name(pname){
         return Ok(format!("{}", process.name().to_string()));
 
     };
-    return Err("None".to_string());
+    return None
 }
 
 fn ini_file() -> String{
@@ -497,11 +398,10 @@ fn tray(){
 
 }
 
-fn run_cmd(cmd: &String) -> Result<std::process::Child, std::io::Error>{
+fn run_cmd(cmd: &String) -> Result<std::process::Child, String, std::io::Error>{
     let output = Command::new("cmd.exe")
         .creation_flags(CREATE_NO_WINDOW)
         .arg("/c")
-        .arg("start")
         .arg(&cmd)
         .spawn();
     
@@ -531,7 +431,7 @@ async fn main() {
     .unwrap();
   
     // Read INI Sections and operate on each one
-    loop{
+    loop {
         match rx.try_recv(){
             Ok(Message::Quit) => exit_app(Some(1), "Menu"),
             _ => {}
@@ -541,30 +441,28 @@ async fn main() {
         let i = Ini::load_from_file(path).unwrap();
         for (sect, prop) in i.iter(){
             match sect.unwrap() {
-                "Screensaver" => continue,
-                "Idle" => continue,
-                "defaults" => continue,
+                "Screensaver" => (),
+                "defaults" => (),
                 sec => {
                     // capture all keys for section
                     let section = Instance {
-                        exeName: get_key(&sec.to_string(), "exeName"),
-                        gameWindowName: get_key(&sec.to_string(), "gameWindowName"),
-                        nameOfahk: get_key(&sec.to_string(), "nameOfahk"),
-                        pathToahk: get_key(&sec.to_string(), "pathToahk"),
-                        OpenRGBprofile: get_key(&sec.to_string(), "OpenRGBprofile"),
-                        SignalRGBprofile: get_key(&sec.to_string(), "SignalRGBprofile"),
-                        voiceAttackProfile: get_key(&sec.to_string(), "voiceAttackProfile"),
-                        game_or_win: get_key(&sec.to_string(), "game-or-win"),
-                        running_pid: get_key(&sec.to_string(), "running_pid"),
-                        running: get_key(&sec.to_string(), "running")
+                        exe_name: get_key(&sec.to_string(), "exeName"),
+                        game_window_name: get_key(&sec.to_string(), "gameWindowName").to_string(),
+                        name_ofahk: get_key(&sec.to_string(), "nameOfahk").to_string(),
+                        path_toahk: get_key(&sec.to_string(), "pathToahk").to_string(),
+                        open_rgbprofile: get_key(&sec.to_string(), "OpenRGBprofile").to_string(),
+                        signal_rgbprofile: get_key(&sec.to_string(), "SignalRGBprofile").to_string(),
+                        voice_attack_profile: get_key(&sec.to_string(), "voiceAttackProfile").to_string(),
+                        game_or_win: get_key(&sec.to_string(), "game-or-win").to_string(),
+                        running_pid: get_key(&sec.to_string(), "running_pid").to_string(),
+                        running: get_key(&sec.to_string(), "running").to_string()
                     };
 
                     match section.game_or_win.as_str() {
                         "Window" => {
                             //is program running?
-                            let ret = get_pid(Some(&section.exeName));
-                            log("d", &ret.unwrap());
-                            exit_app(Some(1), "test");
+                            let win_bool = get_pid(Some(&section.exe_name)).expect("Cannot retrieve the PID!"); 
+  
                             //is window active?
 
                             //change ini values
@@ -574,20 +472,23 @@ async fn main() {
                             //run extra commands
 
                             //log
-
+                            // match win_bool {
+                            //     Ok(msg) => {
+                            //         log("d", &format!("OK: {}",&msg.to_string()));
+                            //     }
+                            //     Err(emsg) => {
+                            //         log("d", &format!("ERR: {}",&emsg.to_string()));
+                            //     }
+                            // }
 
                         },
                         "Game" => {
-                            // let game = game_reaction(sec.unwrap().to_string()).await;
-                            // match game {
-                            //     Ok(result) => {
-                            //         log("i", &format!("{}", result));
-                            //         sleep(500);   
-                            //     },
-                            //     Err(_) => continue
-                            // };
+
+                            let ret = get_pid(Some(&section.exe_name));
+                            log("d", &ret.unwrap().to_string());
+
                         },
-                        _ => continue
+                        _ => ()
                     };
                 }
             };
@@ -613,7 +514,6 @@ async fn main() {
             },
             Err(_) => continue
         };
-
         sleep(500)
     }
 }
