@@ -1,5 +1,0 @@
-"20220917201850": INFO: Log Initialized. GameMon started...
-"20220917201901": DEBUG: "signalrgb://effect/apply/Pinwheel?speed=1^&lineThickness=3^&background=%23150720^&pinwheelColor=%238bff3c^&-silentlaunch-^&-silentlaunch-"
-"20220917201901": INFO: "Opera detected! Changed SignalRGB to Pinwheel?speed=1&lineThickness=3&background=%23150720&pinwheelColor=%238bff3c&-silentlaunch-. \"Could not execute OpenRGB Command: http://6742:127.0.0.1/Opera?-silentlaunch-: reqwest::Error { kind: Builder, source: InvalidPort }\""
-"20220917201909": DEBUG: "signalrgb://effect/apply/Rainbow%20Rise?-silentlaunch-"
-"20220917201909": INFO: "Opera no longer detected! Changed SignalRGB to Rainbow Rise. \"Could not execute OpenRGB Command: http://6742:127.0.0.1/General?-silentlaunch-: reqwest::Error { kind: Builder, source: InvalidPort }\""

@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 10:25:17                          #
+// Last Modified: Sat, 05 Nov 2022 @ 14:53:07                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -19,50 +19,30 @@
     ),
     windows_subsystem = "windows",
   )]
+
 //   Import Data ####
 // extern crate winreg;
 use sysinfo::{ProcessExt, System, SystemExt, Pid};
-use native_dialog::{FileDialog};
+use native_dialog::{FileDialog, MessageDialog, MessageType};
 use active_win_pos_rs::get_active_window;
 use std::{process::{Command}, os::windows::{process::CommandExt}, io::Write, fs::{OpenOptions, File}, path::{Path, PathBuf}, cmp::Ordering};
 use chrono::{Local, NaiveTime};
+use reqwest::{self, header};
 use {std::sync::mpsc, tray_item::TrayItem};
 use winreg::{enums::*};
 use winreg::RegKey;
+use user_idle::UserIdle;
 use windows_win::{raw::window::{
     get_by_title,
-    get_thread_process_id,
-    send_message,
-    get_by_class
+    get_thread_process_id
 }};
-use winapi::{
-    um::{
-        winuser::{
-            LASTINPUTINFO,
-            PLASTINPUTINFO,
-            GetLastInputInfo, BM_CLICK, GetDesktopWindow
-        },
-    }};
-use winsafe::{prelude::*, WString, co::{DLGID, HRESULT}};
-use winsafe::{HWND, gui, POINT, SIZE, co::{COLOR, WS, WS_EX, SS, MB}};
-use quoted_string;
-use quoted_string::strip_dquotes;
-use ureq::{self};
-use ureq::Error;
-use eventlog;
-use log::{info, trace, debug, error, warn};
-use mouse_rs::{types::keys::Keys, Mouse};
-use msgbox;
+use winsafe::{prelude::*, WString};
+use winsafe::{gui, POINT, SIZE, co::{COLOR, WS, SS}};
 
 // Environment Variables
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // Macros
-macro_rules! d_quote {
-    ($a:expr) => {
-        strip_dquotes($a).unwrap().to_string()
-    }
-}
 
 macro_rules! exit_app {
     
@@ -74,10 +54,7 @@ macro_rules! exit_app {
             assert!(all_close.is_ok());
             log!(format!("All ahk scripts are closed"), "w");
 
-            write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
-
-            eventlog::deregister("GameMon Log").unwrap();
-            
+            write_key("defaults", "exit_reason", "Shutdown");
             std::process::exit($a);
         }
     };
@@ -90,9 +67,7 @@ macro_rules! exit_app {
             assert!(all_close.is_ok());
             log!(format!("All ahk scripts are closed"), "w");
 
-            write_key(&"defaults".to_string(), "exit_reason", $b);
-
-            eventlog::deregister("GameMon Log").unwrap();
+            write_key("defaults", "exit_reason", $b);
             std::process::abort();           
         }
     };
@@ -105,9 +80,7 @@ macro_rules! exit_app {
             assert!(all_close.is_ok());
             log!(format!("All ahk scripts are closed"), "w");
 
-            write_key(&"defaults".to_string(), "exit_reason", $b);
-
-            eventlog::deregister("GameMon Log").unwrap();
+            write_key("defaults", "exit_reason", $b);
             std::process::exit($a);
         }
     };
@@ -116,7 +89,6 @@ macro_rules! exit_app {
         {
             let all_close = close_all_ahk();
             assert!(all_close.is_ok());
-            eventlog::deregister("GameMon Log").unwrap();
             std::process::abort();
         }
     };
@@ -125,35 +97,70 @@ macro_rules! exit_app {
 macro_rules! log {
     ($a:expr) => {
         {
-            info!("{}", $a);
-            $a
+            let now = timestamp();
+            let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+            let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
+            let mut log_file: String = g_key.get_value("InstallDir").unwrap();
+            log_file.push_str("\\gamemon.log");
+
+            let data = format!("{}: INFO: {}", &now, $a);
+
+            let mut lfile = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(&log_file)
+                .unwrap();
+            write!(lfile, "{}", format!("{data}\n")).unwrap();
+        
         }
     };
 
     ($a:expr,$b:expr) => {
         {
+            let now = timestamp();
+            let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+            let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
+            let mut log_file: String = g_key.get_value("InstallDir").unwrap();
+            log_file.push_str("\\gamemon.log");
+
             match $b {
                 "i" => {
-                    info!("{}", $a);
-                    $a
+                    let data = format!("{}: INFO: {}", &now, $a);
+                    let mut lfile = OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(&log_file)
+                        .unwrap();
+                    write!(lfile, "{}", format!("{data}\n")).unwrap();
                 },
                 "d" => {
-                    debug!("{}", $a);
-                    $a                   
+                    let data = format!("{}: DEBUG: {}", &now, $a);
+                    let mut lfile = OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(&log_file)
+                        .unwrap();
+                    write!(lfile, "{}", format!("{data}\n")).unwrap();                    
                 },
                 "e" => {
-                    error!("{}", $a);
-                    $a                    
+                    let data = format!("{}: ERROR: {}", &now, $a);
+                    let mut lfile = OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(&log_file)
+                        .unwrap();
+                    write!(lfile, "{}", format!("{data}\n")).unwrap();                    
                 },
                 "w" => {
-                    warn!("{}", $a);
-                    $a                    
+                    let data = format!("{}: WARNING: {}", &now, $a);
+                    let mut lfile = OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(&log_file)
+                        .unwrap();
+                    write!(lfile, "{}", format!("{data}\n")).unwrap();                    
                 },
-                "t" => {
-                    trace!("{}", $a);
-                    $a                    
-                },
-                _ => $a,
+                _ => (),
             }
                    
         }
@@ -161,8 +168,20 @@ macro_rules! log {
 
     () => {
         {
-            trace!("{}", "BREAK BREAK BREAK ----------------");
-            $a          
+            let now = timestamp();
+            let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+            let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
+            let mut log_file: String = g_key.get_value("InstallDir").unwrap();
+            log_file.push_str("\\gamemon.log");
+
+            let data = format!("{}: DEBUG: BREAK BREAK BREAK ----------------", &now);
+
+            let mut lfile = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(&log_file)
+                .unwrap();
+            write!(lfile, "{}", format!("{data}\n")).unwrap();           
         }
     }
 }
@@ -174,7 +193,6 @@ enum Message {
     Quit,
     Gui,
     Defaults,
-    Logs,
 }
 
 struct Instance {
@@ -188,8 +206,7 @@ struct Instance {
     game_or_win: String,
     running: String,
     running_pid: String,
-    other_commands: String,
-    priority: String
+    other_commands: String
 }
 
 impl Instance {
@@ -206,7 +223,6 @@ impl Instance {
             running: "".to_string(),
             running_pid: "".to_string(),
             other_commands: "".to_string(),
-            priority: "".to_string()
         }
     }
 }
@@ -224,8 +240,7 @@ struct Defaults {
     orgb_port: String,
     orgb_address: String,
     gameon: String,
-    window_flag: String,
-    current_priority: String
+    window_flag: String
 }
 
 impl Defaults {
@@ -244,7 +259,6 @@ impl Defaults {
             orgb_address: "".to_string(),
             gameon: "".to_string(),
             window_flag: "".to_string(),
-            current_priority: "".to_string()
         }
     }
 }
@@ -609,16 +623,6 @@ impl DefaultsWindow {
                 self2.edit_night_hour_srgb_profile.set_text(&defaults.night_hour_srgb_profile);
                 self2.edit_orgb_port.set_text(&defaults.orgb_port);
                 self2.edit_orgb_address.set_text(&defaults.orgb_address);
-                self2.label_openRGBpath.set_text("OpenRGB Path to executable");
-                self2.label_voiceAttackPath.set_text("VoiceAttack Path to executable");
-                self2.label_defaultORGBProfile.set_text("Default OpenRGB Profile");
-                self2.label_defaultSRGBProfile.set_text("Default SignalRGB Profile");
-                self2.label_screensaver_orgb_profile.set_text("Default OpenRGB Profile for Screensaver");
-                self2.label_screensaver_srgb_profile.set_text("Default SignalRGB Profile for Screensaver");
-                self2.label_night_hour_orgb_profile.set_text("Default OpenRGB Profile for Night Hours");
-                self2.label_night_hour_srgb_profile.set_text("Default SignalRGB Profile for Night Hours");
-                self2.label_orgb_port.set_text("OpenRGB port");
-                self2.label_orgb_address.set_text("OpenRGB Address");
               
                     
 				Ok(0)
@@ -628,24 +632,17 @@ impl DefaultsWindow {
         self.btn_save.on().bn_clicked({
             let self2 = self.clone();
             move || {
-                write_key(&"defaults".to_string(), "openRGBPath", self2.edit_openRGBpath.text().as_str());
-                write_key(&"defaults".to_string(), "voiceAttackPath", self2.edit_voiceAttackPath.text().as_str());
-                write_key(&"defaults".to_string(), "defaultORGBProfile", self2.edit_defaultORGBProfile.text().as_str());
-                write_key(&"defaults".to_string(), "defaultSRGBProfile", self2.edit_defaultSRGBProfile.text().as_str());
-                write_key(&"defaults".to_string(), "screensaver_orgb_profile", self2.edit_screensaver_orgb_profile.text().as_str());
-                write_key(&"defaults".to_string(), "screensaver_srgb_profile", self2.edit_screensaver_srgb_profile.text().as_str());
-                write_key(&"defaults".to_string(), "night_hour_orgb_profile", self2.edit_night_hour_orgb_profile.text().as_str());
-                write_key(&"defaults".to_string(), "night_hour_srgb_profile", self2.edit_night_hour_srgb_profile.text().as_str());
-                write_key(&"defaults".to_string(), "orgb_port", self2.edit_orgb_port.text().as_str());
-                write_key(&"defaults".to_string(), "orgb_address", self2.edit_orgb_address.text().as_str());
-                match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
-                    Ok(o) => {
-                        log!(&format!("Saved settings for {}...\n\n{}", &"defaults".to_string(), o));
-                    },
-                    Err(e) => {
-                        log!(&format!("Saved settings for {}...\n\nERROR: Error closing dialog {}", &"defaults".to_string(), e), "w");
-                    }
-                }
+                write_key(&"defaults", "openRGBPath", self2.edit_openRGBpath.text().as_str());
+                write_key(&"defaults", "voiceAttackPath", self2.edit_voiceAttackPath.text().as_str());
+                write_key(&"defaults", "defaultORGBProfile", self2.edit_defaultORGBProfile.text().as_str());
+                write_key(&"defaults", "defaultSRGBProfile", self2.edit_defaultSRGBProfile.text().as_str());
+                write_key(&"defaults", "screensaver_orgb_profile", self2.edit_screensaver_orgb_profile.text().as_str());
+                write_key(&"defaults", "screensaver_srgb_profile", self2.edit_screensaver_srgb_profile.text().as_str());
+                write_key(&"defaults", "night_hour_orgb_profile", self2.edit_night_hour_orgb_profile.text().as_str());
+                write_key(&"defaults", "night_hour_srgb_profile", self2.edit_night_hour_srgb_profile.text().as_str());
+                write_key(&"defaults", "orgb_port", self2.edit_orgb_port.text().as_str());
+                write_key(&"defaults", "orgb_address", self2.edit_orgb_address.text().as_str());
+                msg_box("GameMon", "Saved!");
                 Ok(())
             }
         });
@@ -678,6 +675,10 @@ pub struct MyWindow {
     label_orgb_profile: gui::Label,
     edit_orgb_profile: gui::Edit,
     btn_find: gui::Button,
+    label_orgb_port: gui::Label,
+    edit_orgb_port: gui::Edit,
+    label_orgb_address: gui::Label,
+    edit_orgb_address: gui::Edit,
     label_srgb_profile: gui::Label,
     edit_srgb_profile: gui::Edit,
     label_va_profile: gui::Label,
@@ -685,8 +686,6 @@ pub struct MyWindow {
     label_game_win: gui::Label,
     btn_save: gui::Button,
     radio_game_win: gui::RadioGroup,
-    label_priority: gui::Label,
-    radio_priority: gui::RadioGroup,
     btn_close: gui::Button,
     label_other_commands: gui::Label,
     btn_cmd_add: gui::Button,
@@ -713,7 +712,6 @@ impl MyWindow {
                     WS::CLIPCHILDREN | 
                     WS::BORDER | 
                     WS::VISIBLE,
-                ex_style: WS_EX::TRANSPARENT,
                 size: SIZE::new(900, 825),
                 ..Default::default() 
             },
@@ -887,6 +885,48 @@ impl MyWindow {
 
         let last_y = last_y + 30;
 
+        let label_orgb_port = gui::Label::new(
+            &wnd,
+            gui::LabelOpts {
+                text: "OpenRGB Port".to_owned(),
+                size: SIZE::new(95,20),
+                position: POINT::new(390, last_y),
+                ..Default::default()
+            },
+        );
+
+        let edit_orgb_port = gui::Edit::new(
+            &wnd,
+            gui::EditOpts {
+                text: "".to_string(),
+                width: 100,
+                position: POINT::new(485, last_y - 2),  
+                ..Default::default()
+            },
+        );
+
+        let label_orgb_address = gui::Label::new(
+            &wnd,
+            gui::LabelOpts {
+                text: "OpenRGB Address".to_owned(),
+                size: SIZE::new(100,20),
+                position: POINT::new(590, last_y),
+                ..Default::default()
+            },
+        );
+
+        let edit_orgb_address = gui::Edit::new(
+            &wnd,
+            gui::EditOpts {
+                text: "".to_string(),
+                width: 200,
+                position: POINT::new(690, last_y - 2),  
+                ..Default::default()
+            },
+        );
+
+        let last_y = last_y + 30;
+
         let label_srgb_profile = gui::Label::new(
             &wnd,
             gui::LabelOpts {
@@ -945,16 +985,6 @@ impl MyWindow {
             },
         );
 
-        let label_priority = gui::Label::new(
-            &wnd,
-            gui::LabelOpts {
-                text: "Priority....".to_owned(),
-                size: SIZE::new(400,20),
-                position: POINT::new(570, last_y),
-                ..Default::default()
-            },
-        );
-
         let last_y = last_y + 28;
 
         let radio_game_win = gui::RadioGroup::new(
@@ -969,37 +999,6 @@ impl MyWindow {
                     text: "Window".to_owned(),
                     selected: false,
                     position: POINT::new(460, last_y + 2),  
-                    ..Default::default()
-                },
-
-            ]
-            
-        );
-
-        let radio_priority = gui::RadioGroup::new(
-            &wnd, &[
-                gui::RadioButtonOpts {
-                    text: "1".to_owned(),
-                    selected: false,
-                    position: POINT::new(570, last_y + 2),  
-                    ..Default::default()
-                },
-                gui::RadioButtonOpts {
-                    text: "2".to_owned(),
-                    selected: false,
-                    position: POINT::new(620, last_y + 2),  
-                    ..Default::default()
-                },
-                gui::RadioButtonOpts {
-                    text: "3".to_owned(),
-                    selected: false,
-                    position: POINT::new(670, last_y + 2),  
-                    ..Default::default()
-                },
-                gui::RadioButtonOpts {
-                    text: "4".to_owned(),
-                    selected: false,
-                    position: POINT::new(720, last_y + 2),  
                     ..Default::default()
                 },
 
@@ -1098,6 +1097,10 @@ impl MyWindow {
             label_orgb_profile,
             btn_find,
             edit_orgb_profile,
+            label_orgb_port,
+            edit_orgb_port,
+            label_orgb_address,
+            edit_orgb_address,
             label_srgb_profile,
             edit_srgb_profile,
             label_va_profile,
@@ -1112,8 +1115,6 @@ impl MyWindow {
             edit_cmd_add,
             btn_cmd_delete,
             cmd_list,
-            label_priority,
-            radio_priority,
         };
         new_self.events(); // attach our events
         new_self
@@ -1127,15 +1128,6 @@ impl MyWindow {
                 let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                 let path = Path::new("Software").join("GameMon");
                 let game_mon = hklm.open_subkey(&path).unwrap();
-
-                self2.label_ahk_name.set_text("Name of AHK Script to run");
-                self2.label_ahk_path.set_text("Path to AHK Script to run");
-                self2.label_orgb_profile.set_text("OpenRGB Profile to Apply (***REQUIRES OpenRGB Webhooks Plugin***)");
-                self2.label_srgb_profile.set_text("SignalRGB Profile to Apply");
-                self2.label_va_profile.set_text("VoiceAttack Profile to Apply");
-                self2.label_other_commands.set_text("------------------------------------------------------------- \
-                                Other Commands -------------------------------------------------------------");
-                self2.label_priority.set_text("Priority....");
                 
                 for sec in game_mon.enum_keys().map(|x| x.unwrap()){
                     match &sec.as_str() {
@@ -1149,15 +1141,19 @@ impl MyWindow {
                     self2.main_list.items().add(&[i]);
                 }
 
+                
+
+                
+                let defaults = get_defaults();
+                self2.edit_orgb_port.set_text(&defaults.orgb_port);
+                self2.edit_orgb_address.set_text(&defaults.orgb_address);
                 self2.main_list.focus();
 
-                let sec = self2.main_list.items().text(0);
+                let sec = &self2.main_list.items().text(0);
                 match &sec.as_str() {
                     &"defaults" => (),
                     _ => {
                         let section = get_section(&sec);
-                       
-                        
                         self2.edit_exe.set_text(&section.exe_name);
                         self2.edit_win_name.set_text(&section.game_window_name);
                         self2.edit_ahk_name.set_text(&section.name_ofahk);
@@ -1171,20 +1167,6 @@ impl MyWindow {
                             },
                             _ => {
                                 self2.radio_game_win[1].select(true);
-                            }
-                        };
-                        match section.priority.as_str() {
-                            "1" => {
-                                self2.radio_priority[0].select(true);
-                            },
-                            "2" => {
-                                self2.radio_priority[1].select(true);
-                            },
-                            "3" => {
-                                self2.radio_priority[2].select(true);
-                            },
-                            _ => {
-                                self2.radio_priority[3].select(true);
                             }
                         };
                         match &section.other_commands.as_str() {
@@ -1205,15 +1187,19 @@ impl MyWindow {
         self.main_list.on().lbn_sel_change({ 
 			let self2 = self.clone();
 			move || {
-            
-                let sec = self2.main_list.items().iter_selected().last().unwrap().1;
+                
+                let defaults = get_defaults();
+                self2.edit_orgb_port.set_text(&defaults.orgb_port);
+                self2.edit_orgb_address.set_text(&defaults.orgb_address);
+
+                let sec = &self2.main_list.items().iter_selected().last().unwrap().1;
                 
                 match &sec.as_str() {
                     &"defaults" => (),
                     &"Idle" => {
                         let section = get_section(&sec);
                         self2.label_exe.set_text("Idle Time in Seconds");
-                        self2.edit_exe.set_text(&ss_get("ScreenSaveTimeOut"));
+                        self2.edit_exe.set_text(&section.exe_name);
                         self2.label_win_name.set_text("Night Hours (ie: 2130-0630)");
                         self2.edit_win_name.set_text(&section.game_window_name);
                         self2.edit_ahk_name.set_text(&section.name_ofahk);
@@ -1224,40 +1210,14 @@ impl MyWindow {
                         self2.label_game_win.set_text("Activate Screensaver?");
                         self2.radio_game_win[0].set_text("Yes");
                         self2.radio_game_win[1].set_text("No");
-                        match ss_get("ScreenSaveActive").as_str() {
-                            "1" => {
+                        match section.game_or_win.as_str() {
+                            "Yes" => {
                                 self2.radio_game_win[0].select(true);
                                 self2.radio_game_win[1].select(false);
                             },
                             _ => {
                                 self2.radio_game_win[0].select(false);
                                 self2.radio_game_win[1].select(true);
-                            }
-                        };
-                        match section.priority.as_str() {
-                            "1" => {
-                                self2.radio_priority[0].select(true);
-                                self2.radio_priority[1].select(false);
-                                self2.radio_priority[2].select(false);
-                                self2.radio_priority[3].select(false);
-                            },
-                            "2" => {
-                                self2.radio_priority[1].select(true);
-                                self2.radio_priority[0].select(false);
-                                self2.radio_priority[2].select(false);
-                                self2.radio_priority[3].select(false);
-                            },
-                            "3" => {
-                                self2.radio_priority[2].select(true);
-                                self2.radio_priority[1].select(false);
-                                self2.radio_priority[0].select(false);
-                                self2.radio_priority[3].select(false);
-                            },
-                            _ => {
-                                self2.radio_priority[3].select(true);
-                                self2.radio_priority[1].select(false);
-                                self2.radio_priority[2].select(false);
-                                self2.radio_priority[0].select(false);
                             }
                         };
                         self2.cmd_list.items().delete_all();
@@ -1295,32 +1255,6 @@ impl MyWindow {
                                 self2.radio_game_win[1].select(true);
                             }
                         };
-                        match section.priority.as_str() {
-                            "1" => {
-                                self2.radio_priority[0].select(true);
-                                self2.radio_priority[1].select(false);
-                                self2.radio_priority[2].select(false);
-                                self2.radio_priority[3].select(false);
-                            },
-                            "2" => {
-                                self2.radio_priority[1].select(true);
-                                self2.radio_priority[0].select(false);
-                                self2.radio_priority[2].select(false);
-                                self2.radio_priority[3].select(false);
-                            },
-                            "3" => {
-                                self2.radio_priority[2].select(true);
-                                self2.radio_priority[1].select(false);
-                                self2.radio_priority[0].select(false);
-                                self2.radio_priority[3].select(false);
-                            },
-                            _ => {
-                                self2.radio_priority[3].select(true);
-                                self2.radio_priority[1].select(false);
-                                self2.radio_priority[2].select(false);
-                                self2.radio_priority[0].select(false);
-                            }
-                        };
                         self2.cmd_list.items().delete_all();
                         match &section.other_commands.as_str() {
                             &"" => (),
@@ -1341,57 +1275,13 @@ impl MyWindow {
         self.radio_game_win.on().bn_clicked({
             let self2 = self.clone();
             move || {
-                let sec = self2.main_list.items().iter_selected().last().unwrap().1;
+                let sec = &self2.main_list.items().iter_selected().last().unwrap().1;
                 if let Some(game_or_win) = self2.radio_game_win.checked() {
                     let gow = game_or_win.hwnd().GetWindowText()?;
                     
-                    write_key(&sec, "game_or_win", &gow);
-                    match &sec.as_str() {
-                        &"Idle" => {
-                            let new_gow = match gow.as_str() {
-                                "Yes" => "1",
-                                _ => "0"
-                            };
-                            ss_set("ScreenSaveActive", new_gow);
-                        },
-                        _ => ()
-                    }
-
-                    match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
-                        Ok(o) => {
-                            log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
-                        },
-                        Err(e) => {
-                            log!(&format!("Saved settings for {}...\n\nERROR: Error closing dialog {}", &sec, e), "w");
-                        }
-                    }
-                    
+                    write_key(&sec, "game-or-win", &gow);
+                    msg_box("GameMon", "Saved!");
                 }
-                reset_running();
-
-                Ok(())
-            }
-        });
-
-        self.radio_priority.on().bn_clicked({
-            let self2 = self.clone();
-            move || {
-                let sec = self2.main_list.items().iter_selected().last().unwrap().1;
-                if let Some(priority) = self2.radio_priority.checked() {
-                    let gow = priority.hwnd().GetWindowText()?;
-                    
-                    write_key(&sec, "priority", &gow);
-                    match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
-                        Ok(o) => {
-                            log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
-                        },
-                        Err(e) => {
-                            log!(&format!("Saved settings for {}...\n\nERROR: Error closing dialog {}", &sec, e), "w");
-                        }
-                    }
-                }
-                reset_running();
-
                 Ok(())
             }
         });
@@ -1399,7 +1289,7 @@ impl MyWindow {
         self.btn_cmd_add.on().bn_clicked({
             let self2 = self.clone();
             move || {
-                let sec = self2.main_list.items().iter_selected().last().unwrap().1;
+                let sec = &self2.main_list.items().iter_selected().last().unwrap().1;
                 let section = get_section(&sec);
                 let mut final_string = "".to_owned();
                 match &section.other_commands.as_str() {
@@ -1440,7 +1330,7 @@ impl MyWindow {
         self.btn_cmd_delete.on().bn_clicked({
             let self2 = self.clone();
             move || {
-                let sec = self2.main_list.items().iter_selected().last().unwrap().1;
+                let sec = &self2.main_list.items().iter_selected().last().unwrap().1;
                 let section = get_section(&sec);
                 let cmd = &self2.cmd_list.items().iter_selected().last().unwrap().1;
                 let mut needle = " && ".to_owned();
@@ -1536,7 +1426,6 @@ impl MyWindow {
                         }
                     }
                 };
-                reset_running();
                 
                 Ok(())
             }
@@ -1568,11 +1457,15 @@ impl MyWindow {
                     self2.main_list.items().add(&[i]);
                 }
                 
+                
+                let defaults = get_defaults();
+                self2.edit_orgb_port.set_text(&defaults.orgb_port);
+                self2.edit_orgb_address.set_text(&defaults.orgb_address);
                 self2.main_list.focus();
 
-                let sec = self2.main_list.items().text(0);
-                match sec.as_str() {
-                    "defaults" => (),
+                let sec = &self2.main_list.items().text(0);
+                match &sec.as_str() {
+                    &"defaults" => (),
                     _ => {
                         let section = get_section(&sec);
                         self2.edit_exe.set_text(&section.exe_name);
@@ -1595,7 +1488,7 @@ impl MyWindow {
 
                     }
                 };
-                reset_running();
+
                 Ok(())
             }
         });
@@ -1603,18 +1496,10 @@ impl MyWindow {
         self.btn_save.on().bn_clicked({
             let self2 = self.clone();
             move || {
-                let sec = self2.main_list.items().iter_selected().last().unwrap().1;
+                let sec = &self2.main_list.items().iter_selected().last().unwrap().1;
                 
-                write_key(&sec, "exe_name", &self2.edit_exe.text());
-
-                match &sec.as_str() {
-                    &"Idle" => {
-                        ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
-                    },
-                    _ => ()
-                }
-
-                write_key(&sec, "game_window_name", &self2.edit_win_name.text());
+                write_key(&sec, "exeName", &self2.edit_exe.text());
+                write_key(&sec, "gameWindowName", &self2.edit_win_name.text());
 
                 if &self2.edit_ahk_path.text() == "" {
                     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
@@ -1635,39 +1520,20 @@ impl MyWindow {
                     self2.edit_ahk_path.set_text(&script_dir);
                 }
 
-                write_key(&sec, "name_ofahk", &self2.edit_ahk_name.text());
-                write_key(&sec, "path_toahk", &self2.edit_ahk_path.text());
-                write_key(&sec, "open_rgbprofile", &self2.edit_orgb_profile.text());
-                write_key(&sec, "voice_attack_profile", &self2.edit_va_profile.text());
-                write_key(&sec, "signal_rgbprofile", &self2.edit_srgb_profile.text());
+                write_key(&sec, "nameOfahk", &self2.edit_ahk_name.text());
+                write_key(&sec, "pathToahk", &self2.edit_ahk_path.text());
+                write_key(&sec, "OpenRGBprofile", &self2.edit_orgb_profile.text());
+                write_key(&sec, "voiceAttackProfile", &self2.edit_va_profile.text());
+                write_key(&sec, "SignalRGBprofile", &self2.edit_srgb_profile.text());
                 if let Some(game_or_win) = self2.radio_game_win.checked() {
                     let gow = game_or_win.hwnd().GetWindowText()?;
                     write_key(&sec, "game-or-win", &gow);
-                    match &sec.as_str() {
-                        &"Idle" => {
-                            let new_gow = match gow.as_str() {
-                                "Yes" => "1",
-                                _ => "0"
-                            };
-                            ss_set("ScreenSaveActive", new_gow);
-                        },
-                        _ => ()
-                    }
-                }
-                if let Some(priority) = self2.radio_priority.checked() {
-                    let gow = priority.hwnd().GetWindowText()?;
-                    write_key(&sec, "priority", &gow);
                 }
                 log!(&format!("Saved settings for {}...", &sec));
-                match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
-                    Ok(o) => {
-                        log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
-                    },
-                    Err(e) => {
-                        log!(&format!("Saved settings for {}...\n\nERROR: Error closing dialog {}", &sec, e), "w");
-                    }
-                }
-                reset_running();
+                let sec = "defaults".to_string();
+                write_key(&sec, "orgb_port", &self2.edit_orgb_port.text());
+                write_key(&sec, "orgb_address", &self2.edit_orgb_address.text());
+                msg_box("GameMon", "Saved!");
                 Ok(())
             }
         });
@@ -1675,72 +1541,7 @@ impl MyWindow {
         self.btn_close.on().bn_clicked({
             let self2 = self.clone();
             move || {
-                let sec = self2.main_list.items().iter_selected().last().unwrap().1;
-                
-                write_key(&sec, "exe_name", &self2.edit_exe.text());
-
-                match &sec.as_str() {
-                    &"Idle" => {
-                        ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
-                    },
-                    _ => ()
-                }
-
-                write_key(&sec, "game_window_name", &self2.edit_win_name.text());
-
-                if &self2.edit_ahk_path.text() == "" {
-                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-                    let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
-                    let mut script_dir: String = g_key.get_value("InstallDir").unwrap();
-                    let script_dirname = "\\scripts";
-                    script_dir.push_str(&script_dirname);
-                    script_dir.push_str(&format!("\\{}.ahk", &sec));
-
-                    File::create(&script_dir).unwrap();
-                    let mut lfile = OpenOptions::new()
-                        .write(true)
-                        .append(true)
-                        .open(&script_dir)
-                        .unwrap();
-                    write!(lfile, "{}", format!("#Persistent\n#SingleInstance, Force\n#NoTrayIcon")).unwrap();
-
-                    self2.edit_ahk_path.set_text(&script_dir);
-                }
-
-                write_key(&sec, "name_ofahk", &self2.edit_ahk_name.text());
-                write_key(&sec, "path_toahk", &self2.edit_ahk_path.text());
-                write_key(&sec, "open_rgbprofile", &self2.edit_orgb_profile.text());
-                write_key(&sec, "voice_attack_profile", &self2.edit_va_profile.text());
-                write_key(&sec, "signal_rgbprofile", &self2.edit_srgb_profile.text());
-                if let Some(game_or_win) = self2.radio_game_win.checked() {
-                    let gow = game_or_win.hwnd().GetWindowText()?;
-                    write_key(&sec, "game-or-win", &gow);
-                    match &sec.as_str() {
-                        &"Idle" => {
-                            let new_gow = match gow.as_str() {
-                                "Yes" => "1",
-                                _ => "0"
-                            };
-                            ss_set("ScreenSaveActive", new_gow);
-                        },
-                        _ => ()
-                    }
-                }
-                if let Some(priority) = self2.radio_priority.checked() {
-                    let gow = priority.hwnd().GetWindowText()?;
-                    write_key(&sec, "priority", &gow);
-                }
-                log!(&format!("Saved settings for {}...", &sec));
-                match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
-                    Ok(o) => {
-                        log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
-                    },
-                    Err(e) => {
-                        log!(&format!("Saved settings for {}...\n\nERROR: Error closing dialog {}", &sec, e), "w");
-                    }
-                }
                 self2.wnd.hwnd().DestroyWindow()?;
-                reset_running();
                 Ok(())
             }
         });
@@ -1767,71 +1568,16 @@ impl MyWindow {
 
 // Extra Functions
 
-fn msg_box(title: String, message: String, exit_wait_time_in_ms: u64) -> Result<DLGID, HRESULT> {
-    let msg = message.clone();
-    let til = title.clone();
-    let y = std::thread::spawn(move ||{
-        let _rr = msgbox::create(&til, &msg, msgbox::IconType::Info);
-
-    });
-    
-    let f = match exit_wait_time_in_ms {
-        0 => Ok(DLGID::OK),
-        _ => {
-            sleep(exit_wait_time_in_ms);
-
-            // let hwnd1 = get_by_title("Monitor Settings", None)
-            //     .unwrap()
-            //     .last()
-            //     .unwrap()
-            //     .to_owned();
-
-            let hwnd1 = unsafe {GetDesktopWindow()};
-
-            let p = get_by_title(&title, Some(hwnd1)).unwrap().last().unwrap().to_owned();
-            let b = get_by_title("OK", Some(p)).unwrap().last().unwrap().to_owned();
-
-            let s = send_message(b, BM_CLICK , 0, 0, Some(5));
-
-            let r = match s {
-                Ok(_) => {
-                    Ok(DLGID::OK)
-                }, 
-                Err(e) => {
-                    log!(format!("Could not close MsgBox!\nTitle: {}\nText: {}\nHandle: {:?}\nError: {}", title, message, p, e), "e" );
-                    Err(HRESULT::E_INVALIDARG)
-                }
-            };
-
-            r
-        }
-    };
-
-    let _x = y.join();
-    
-    return f;
-    
-}
-
-fn ss_get(key_name: &'static str) -> String{
+async fn screensaver() -> String{
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let desktop = hkcu.open_subkey("Control Panel\\Desktop").unwrap();
-    let screen_s: String = desktop.get_value(&key_name).unwrap();
+    let screen_s: String = desktop.get_value("SCRNSAVE.EXE").unwrap();
 
     return screen_s;
 }
 
-fn ss_set(key_name: &'static str, key_value: &str){
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let path = Path::new("Control Panel").join("Desktop");
-    let key = hkcu.create_subkey(&path).unwrap().0;
-
-    return key.set_value(&key_name, &key_value).unwrap();
-}
-
-
 // Change Signal RGB
-fn change_signal_rgb(profile: &String) -> String{
+async fn change_signal_rgb(profile: &String) -> String{
     let sp = &profile;
     let mut rgb_profile = url_encode(sp.to_string());
 
@@ -1843,61 +1589,48 @@ fn change_signal_rgb(profile: &String) -> String{
     
     let command_var = format!("start signalrgb://effect/apply/{}", &rgb_profile);
   
-    let output = run_cmd(&command_var);
+    let output = run_cmd(&command_var).await;
     let return_var: String = match output {
         Err(e) => format!("Could not execute SignalRGB Command: {}: {:?}", &command_var, e),
         Ok(_) => format!("Changed SignalRGB to {}", &sp)
     };
     
-    sleep(1000);
+    sleep(1000).await;
     return return_var;
 }
 
 // Change OpenRGB
-fn change_open_rgb(addy: &String, port: &String, profile: &String) -> Result<String, String> {
+async fn change_open_rgb(addy: &String, port: &String, profile: &String) -> String {
     let rgb_profile = url_encode(profile.to_string());
     let command_var = format!("http://{}:{}/{}", addy, port, &rgb_profile);
+    
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("User-Agent", header::HeaderValue::from_static("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36"));
+    headers.insert("Content-Type", header::HeaderValue::from_static("application/json"));
+    let body = String::from("post body");
 
-    return match ureq::post(&command_var)
-        .set("User-Agent",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36")
-        .set("Content-Type", "application/json")
-        .send_string(&format!("Requesting Change OpenRGB profile to {}", &rgb_profile)) {
-            Ok(o) => Ok(format!("Changed OpenRGB to {}\n\nResponse:\nCode: {}\nContent: {}\n Url: {}",
-                &rgb_profile, o.status(), o.status_text(), o.get_url())),
-            Err(Error::Status(code, response)) => Err(format!("ERROR: {}", Error::Status(code, response))),
-            transport => Err(format!("ERROR: {}", Error::from(transport.unwrap())))
-        }
 
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build().unwrap();
+
+    let output = client.post(&command_var).body(body).send().await.unwrap();
+    // let output = client.get(&command_var).send().await;
+    
+
+    let return_var: String = match output.status() {
+        reqwest::StatusCode::OK => format!("Changed OpenRGB to {}", &profile),
+        reqwest::StatusCode::NO_CONTENT => format!("Changed OpenRGB to {}", &profile),
+        e => format!("Could not execute OpenRGB Command: {} Status: {:?}", &command_var, e)
+        
+    }; 
+    
+    return return_var.to_string();
 }
 
-// Change VoiceAttack
-fn change_voice_attack(profile: &String) -> String {
-    let vac = format!("{}", get_value("defaults".to_string(), "voice_attack_path".to_string()));
-    let pro = format!("{}", &profile);
-    let cmd = format!("{} -profile {}", &vac, &pro);
-
-    let output = Command::new(&vac)
-        .creation_flags(CREATE_NO_WINDOW)
-        .arg("-profile")
-        .arg(&pro)
-        .spawn();
-
-    return match output {
-    Ok(_) => format!("Changed VoiceAttack profile to {}\n\n{}"
-                , &profile
-                , &cmd),
-    Err(e) => format!("Could not change VoiceAttack profile to {}
-                        \n\n{}\nERROR:\n{}"
-                        , &profile
-                        , &cmd
-                        , &e)
-    };
-}
-
-fn sleep(milliseconds: u64){
+async fn sleep(milliseconds: u64){
     let mills = std::time::Duration::from_millis(milliseconds);
-    std::thread::sleep(mills);
+    tokio::time::sleep(mills).await;
 }
 
 fn reset_running() -> String{
@@ -1915,9 +1648,9 @@ fn reset_running() -> String{
         }
     }
 
-    write_key(&"defaults".to_string(), "gameon", "False");
-    write_key(&"General".to_string(), "running", "True");
-    write_key(&"General".to_string(), "running_pid", "0");
+    write_key("defaults", "gameon", "False");
+    write_key("General", "running", "True");
+    write_key("General", "running_pid", "0");
     return "Running values reset.".to_string();
 }
 
@@ -1932,7 +1665,7 @@ fn close_all_ahk() -> Result<(), String> {
         match &sec.as_str() {
             &"defaults" => (),
             _ => {
-                let ahk_pid = get_ahk_pid(&sec);
+                let ahk_pid = ahk_pid(&sec);
                 match ahk_pid {
                     Ok(o) => {
                         let close_ahk = close_pid(o);
@@ -2012,7 +1745,6 @@ fn reg_check(){
                                 write_key(&section_name, "orgb_port", "6742");
                                 write_key(&section_name, "orgb_address", "127.0.0.1");
                                 write_key(&section_name, "gameon", "False");
-                                write_key(&section_name, "current_priority", "0");
                                 write_key(&section_name, "running", "");
                                 write_key(&section_name, "window_flag", "General");
                                 write_key(&section_name, "screensaver_orgb_profile", "General");
@@ -2034,13 +1766,11 @@ fn reg_check(){
             write_key(&section_name, "OpenRGBprofile", "General");
             write_key(&section_name, "SignalRGBprofile", "General");
             write_key(&section_name, "game-or-win", "Game");
-            write_key(&section_name, "priority", "0");
         
             section_name = "Idle".to_string();
             write_key(&section_name, "exeName", "300");
             write_key(&section_name, "gameWindowName", "2100-0600");
             write_key(&section_name, "game-or-win", "Game");
-            write_key(&section_name, "priority", "4");
         },
         REG_OPENED_EXISTING_KEY => {
             log!(&"An existing key has been opened".to_string());
@@ -2095,80 +1825,79 @@ fn reg_section_new(sec: String) {
 
 
 fn initialize_log(){
-    eventlog::register("GameMon Log").unwrap();
-    eventlog::init("GameMon Log", log::Level::Trace).unwrap();
+    let now = timestamp();
     
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
+    let mut log_file: String = g_key.get_value("InstallDir").unwrap();
+    let mut log_dir: String = g_key.get_value("InstallDir").unwrap();
+    let mut log_archive: String = g_key.get_value("InstallDir").unwrap();
     let mut script_dir: String = g_key.get_value("InstallDir").unwrap();
 
+    let filename: &str= "\\gamemon.log";
+    let dirname: &str = "\\logs";
     let script_dirname: &str = "\\scripts";
+    log_file.push_str(&filename);
+    log_dir.push_str(&dirname);
+    log_archive.push_str(&dirname);
     script_dir.push_str(&script_dirname);
+    log_archive.push_str("\\");
+    log_archive.push_str(&now);
+    log_archive.push_str(".log");
     
+    let d = std::path::Path::new(&log_dir).exists();
+    if d {
+        let e = std::path::Path::new(&log_file).exists();
+        match e {
+            true => {
+                std::fs::write(&log_archive, format!("{}: NEW_ARCHIVE", &now)).expect(&format!("Could not create new log archived file!! {:?}", &log_archive));
+                std::fs::copy(&log_file, &log_archive).expect("Could not copy log file to archive!");
+                std::fs::remove_file(&log_file).expect("Could not delete existing log!");
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+            }
+            false => {
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+            }
+        }
+    } else {
+        std::fs::create_dir(&log_dir).expect("Could not create logs directory!");
+        let e = std::path::Path::new(&log_file).exists();
+        match e {
+            true => {
+                std::fs::write(&log_archive, format!("{}: NEW_ARCHIVE", &now)).expect(&format!("Could not create new log archived file!! {:?}", &log_archive));
+                std::fs::copy(&log_file, &log_archive).expect("Could not copy log file to archive!");
+                std::fs::remove_file(&log_file).expect("Could not delete existing log!");
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+                
+            }
+            false => {
+                std::fs::write(&log_file, format!("{}: INFO: Log Initialized. GameMon started...\n", &now)).expect("Could not create new log file!!");
+            }
+        }
+    }
+
     let s = std::path::Path::new(&script_dir).exists();
     if s {
         
     } else {
         std::fs::create_dir(&script_dir).expect("Could not create scripts directory!");
     }
+    
+}
 
-    let mut custom_view = "C:\\ProgramData\\Microsoft\\Event Viewer\\Views\\gamemon_trace_logs.xml";
-    let e = std::path::Path::new(&custom_view).exists();
-    match e {
-        true => (),
-        false => {
-            std::fs::write(&custom_view, "<ViewerConfig><QueryConfig><QueryParams><Simple>
-            <Channel>Application</Channel><EventId>4</EventId><Source>GameMon Log</Source>
-            <RelativeTimeInfo>0</RelativeTimeInfo><BySource>False</BySource></Simple></QueryParams>
-            <QueryNode><Name LanguageNeutralValue=\"GameMon Trace Logs\">GameMon Trace Logs</Name>
-            <Description>Trace logs from GameMon.exe</Description>
-            <QueryList><Query Id=\"0\" Path=\"Application\">
-            <Select Path=\"Application\">*[System[Provider[@Name='GameMon Log'] 
-            and (EventID=4)]]</Select></Query></QueryList></QueryNode></QueryConfig></ViewerConfig>
-            ").expect("Could not create new event viewer custom view for Trace Logs!!");
-        }
-    };
+fn timestamp() -> String {
+    let mut dt = Local::now().date().format("%Y%m%d").to_string();
+    dt.push_str(&Local::now().time().format("%H%M%S").to_string());
+    return dt
+}
 
-    custom_view = "C:\\ProgramData\\Microsoft\\Event Viewer\\Views\\gamemon_logs.xml";
-    let e = std::path::Path::new(&custom_view).exists();
-    match e {
-        true => (),
-        false => {
-            std::fs::write(&custom_view, "<ViewerConfig><QueryConfig><QueryParams><Simple><Channel>Application</Channel>
-            <EventId>1-3</EventId><Source>GameMon Log</Source>
-            <RelativeTimeInfo>0</RelativeTimeInfo>
-            <BySource>False</BySource></Simple></QueryParams>
-            <QueryNode><Name LanguageNeutralValue=\"GameMon Logs\">GameMon Logs</Name>
-            <Description>Events logged from GameMon</Description>
-            <QueryList><Query Id=\"0\" Path=\"Application\">
-            <Select Path=\"Application\">*[System[Provider[@Name='GameMon Log'] 
-            and ( (EventID &gt;= 1 and EventID &lt;= 3) )]]</Select></Query></QueryList></QueryNode></QueryConfig>
-            <ResultsConfig><Columns><Column Name=\"Level\" Type=\"System.String\" Path=\"Event/System/Level\" Visible=\"\">160</Column>
-            <Column Name=\"Keywords\" Type=\"System.String\" Path=\"Event/System/Keywords\">70</Column>
-            <Column Name=\"Date and Time\" Type=\"System.DateTime\" Path=\"Event/System/TimeCreated/@SystemTime\" Visible=\"\">210</Column>
-            <Column Name=\"Source\" Type=\"System.String\" Path=\"Event/System/Provider/@Name\" Visible=\"\">120</Column>
-            <Column Name=\"Event ID\" Type=\"System.UInt32\" Path=\"Event/System/EventID\" Visible=\"\">120</Column>
-            <Column Name=\"Task Category\" Type=\"System.String\" Path=\"Event/System/Task\" Visible=\"\">123</Column>
-            <Column Name=\"User\" Type=\"System.String\" Path=\"Event/System/Security/@UserID\">50</Column>
-            <Column Name=\"Operational Code\" Type=\"System.String\" Path=\"Event/System/Opcode\">110</Column>
-            <Column Name=\"Log\" Type=\"System.String\" Path=\"Event/System/Channel\">80</Column>
-            <Column Name=\"Computer\" Type=\"System.String\" Path=\"Event/System/Computer\">170</Column>
-            <Column Name=\"Process ID\" Type=\"System.UInt32\" Path=\"Event/System/Execution/@ProcessID\">70</Column>
-            <Column Name=\"Thread ID\" Type=\"System.UInt32\" Path=\"Event/System/Execution/@ThreadID\">70</Column>
-            <Column Name=\"Processor ID\" Type=\"System.UInt32\" Path=\"Event/System/Execution/@ProcessorID\">90</Column>
-            <Column Name=\"Session ID\" Type=\"System.UInt32\" Path=\"Event/System/Execution/@SessionID\">70</Column>
-            <Column Name=\"Kernel Time\" Type=\"System.UInt32\" Path=\"Event/System/Execution/@KernelTime\">80</Column>
-            <Column Name=\"User Time\" Type=\"System.UInt32\" Path=\"Event/System/Execution/@UserTime\">70</Column>
-            <Column Name=\"Processor Time\" Type=\"System.UInt32\" Path=\"Event/System/Execution/@ProcessorTime\">100</Column>
-            <Column Name=\"Correlation Id\" Type=\"System.Guid\" Path=\"Event/System/Correlation/@ActivityID\">85</Column>
-            <Column Name=\"Relative Correlation Id\" Type=\"System.Guid\" Path=\"Event/System/Correlation/@RelatedActivityID\">140</Column>
-            <Column Name=\"Event Source Name\" Type=\"System.String\" Path=\"Event/System/Provider/@EventSourceName\">140</Column></Columns>
-            </ResultsConfig></ViewerConfig>").expect("Could not create new event viewer custom view for GameMon Event Logs!!");
-        }
-    };
-
-    log!("GameMon Started...", "w");
-
+fn msg_box(title: &str, text: &str){
+    MessageDialog::new()
+        .set_type(MessageType::Info)
+        .set_title(&title)
+        .set_text(&format!("{}", &text))
+        .show_alert()
+        .unwrap();
 }
 
 fn get_pid(pname: Option<&str>) -> Result<u32, &str>{
@@ -2199,7 +1928,7 @@ fn get_pid(pname: Option<&str>) -> Result<u32, &str>{
     return Ok(0)
 }
 
-fn get_ahk_pid(sec: &String) -> Result<u32, String> {
+fn ahk_pid(sec: &String) -> Result<u32, String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let autohotkey = hklm.open_subkey("SOFTWARE\\AutoHotkey").unwrap();
     let version: String = autohotkey.get_value("Version").unwrap();
@@ -2240,32 +1969,31 @@ fn name_by_pid(pid: Pid) -> Result<String, String>{
 fn get_section(sec_name: &String) -> Instance {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let mut path = Path::new("Software").join("GameMon");
-    let gamemon = hklm.open_subkey(&path).unwrap();
-    path = Path::new("Software").join("GameMon").join(&sec_name);
-    let sec = hklm.open_subkey(&path).unwrap();
+    let game_mon = hklm.open_subkey(&path).unwrap();
     let mut section = Instance::new();
+    
+    for i in game_mon.enum_keys().map(|x| x.unwrap()).filter(|x| x.contains(sec_name)) {
+        path = Path::new("Software").join("GameMon").join(i);
+        let sec = hklm.open_subkey(&path).unwrap();
 
-    for i in gamemon.enum_keys().map(|x| x.unwrap()){
-        if &i == sec_name {
-            for (name, value) in sec.enum_values().map(|x| x.unwrap()) {
-                match name.as_str() {
-                    "exe_name" => section.exe_name = d_quote!(&value.to_string()),
-                    "game_window_name" => section.game_window_name = d_quote!(&value.to_string()),
-                    "name_ofahk" => section.name_ofahk = d_quote!(&value.to_string()),
-                    "path_toahk" => section.path_toahk = sec.get_value("path_toahk").unwrap(),
-                    "open_rgbprofile" => section.open_rgbprofile = d_quote!(&value.to_string()),
-                    "signal_rgbprofile" => section.signal_rgbprofile = d_quote!(&value.to_string()),
-                    "voice_attack_profile" => section.voice_attack_profile = d_quote!(&value.to_string()),
-                    "game_or_win" => section.game_or_win = d_quote!(&value.to_string()),
-                    "running" => section.running = d_quote!(&value.to_string()),
-                    "running_pid" => section.running_pid = d_quote!(&value.to_string()),
-                    "other_commands" => section.other_commands = d_quote!(&value.to_string()),
-                    "priority" => section.priority = d_quote!(&value.to_string()),
-                    _ => ()
-                }
+        for (name, value) in sec.enum_values().map(|x| x.unwrap()) {
+            match name.as_str() {
+                // "exe_name" => section.exe_name = value.to_string(), 
+                "exe_name" => section.exe_name = value.to_string(),
+                "game_or_win" => section.game_or_win = value.to_string(),
+                "game_window_name" => section.game_window_name = value.to_string(),
+                "name_ofahk" => section.name_ofahk = value.to_string(),
+                "open_rgbprofile" => section.open_rgbprofile = value.to_string(),
+                "other_commands" => section.other_commands = value.to_string(),
+                "path_toahk" => section.path_toahk = value.to_string(),
+                "running" => section.running = value.to_string(),
+                "running_pid" => section.running_pid = value.to_string(),
+                "signal_rgbprofile" => section.signal_rgbprofile = value.to_string(),
+                "voice_attack_profile" => section.voice_attack_profile = value.to_string(),
+                _ => ()
             }
+
         }
-       
     }
 
     return section
@@ -2274,71 +2002,56 @@ fn get_section(sec_name: &String) -> Instance {
 fn get_defaults() -> Defaults {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let mut path = Path::new("Software").join("GameMon");
-    let gamemon = hklm.open_subkey(&path).unwrap();
-    path = Path::new("Software").join("GameMon").join("defaults");
-    let sec = hklm.open_subkey(&path).unwrap();
-    let mut defaults = Defaults::new();
+    let game_mon = hklm.open_subkey(&path).unwrap();
+    let mut section = Defaults::new();
     
+    for i in game_mon.enum_keys().map(|x| x.unwrap()).filter(|x| x.contains("defaults")) {
+        path = Path::new("Software").join("GameMon").join(i);
+        let sec = hklm.open_subkey(&path).unwrap();
 
-    for i in gamemon.enum_keys().map(|x| x.unwrap()){
-        match i.as_str() {
-            "defaults" => {
-                for (name, value) in sec.enum_values().map(|x| x.unwrap()) {
-                    match name.as_str() {
-                        "openrgb_path" => defaults.openrgb_path = d_quote!(&value.to_string()),
-                        "exit_reason" => defaults.exit_reason = d_quote!(&value.to_string()),
-                        "voice_attack_path" => defaults.voice_attack_path = d_quote!(&value.to_string()),
-                        "default_orgb_profile" => defaults.default_orgb_profile = d_quote!(&value.to_string()),
-                        "default_srgb_profile" => defaults.default_srgb_profile = d_quote!(&value.to_string()),
-                        "screensaver_orgb_profile" => defaults.screensaver_orgb_profile = d_quote!(&value.to_string()),
-                        "screensaver_srgb_profile" => defaults.screensaver_srgb_profile = d_quote!(&value.to_string()),
-                        "night_hour_orgb_profile" => defaults.night_hour_orgb_profile = d_quote!(&value.to_string()),
-                        "night_hour_srgb_profile" => defaults.night_hour_srgb_profile = d_quote!(&value.to_string()),
-                        "orgb_port" => defaults.orgb_port = d_quote!(&value.to_string()),
-                        "orgb_address" => defaults.orgb_address = d_quote!(&value.to_string()),
-                        "gameon" => defaults.gameon = d_quote!(&value.to_string()),
-                        "window_flag" => defaults.window_flag = d_quote!(&value.to_string()),
-                        "current_priority" => defaults.current_priority = d_quote!(&value.to_string()),
-                        
-                        _ => ()
-                    }
-                };
+        for (name, value) in sec.enum_values().map(|x| x.unwrap()) {
+            match name.as_str() {
+                "default_orgb_profile" => section.default_orgb_profile = value.to_string(),
+                "default_srgb_profile" => section.default_srgb_profile = value.to_string(),
+                "exit_reason" => section.exit_reason = value.to_string(),
+                "gameon" => section.gameon = value.to_string(),
+                "night_hour_orgb_profile" => section.night_hour_orgb_profile = value.to_string(),
+                "night_hour_srgb_profile" => section.night_hour_srgb_profile = value.to_string(),
+                "openrgb_path" => section.openrgb_path = value.to_string(),
+                "orgb_address" => section.orgb_address = value.to_string(),
+                "orgb_port" => section.orgb_port = value.to_string(),
+                "screensaver_orgb_profile" => section.screensaver_orgb_profile = value.to_string(),
+                "screensaver_srgb_profile" => section.screensaver_srgb_profile = value.to_string(),
+                "voice_attack_path" => section.voice_attack_path = value.to_string(),
+                "window_flag" => section.window_flag = value.to_string(),
+                _ => ()
             }
-            _ => ()
+
         }
     }
-    
-    return defaults
- 
+
+    return section
 }
 
-fn get_value(section: String, key: String) -> String{
+fn write_key(sec_name: &str, key_name: &'static str, key_value: &str){
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let path = Path::new("Software").join("GameMon").join(section);
-    let gamemon = hklm.open_subkey(&path).unwrap();
-    gamemon.get_value(key).unwrap()
-}
-
-fn write_key(sec_name: &String, key_name: &'static str, key_value: &str){
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let path = Path::new("Software").join("GameMon").join(&sec_name);
+    let path = Path::new("Software").join("GameMon").join(sec_name);
     let key = hklm.create_subkey(&path).unwrap().0;
 
     return key.set_value(&key_name, &key_value).unwrap();
 }
 
 fn write_section(sec_name: &String){
-    write_key(sec_name, "exeName", "");
-    write_key(sec_name, "gameWindowName", "");
-    write_key(sec_name, "nameOfahk", "");
-    write_key(sec_name, "pathToahk", "");
-    write_key(sec_name, "OpenRGBprofile", "");
-    write_key(sec_name, "voiceAttackProfile", "");
-    write_key(sec_name, "SignalRGBprofile", "");
-    write_key(sec_name, "game-or-win", "");
-    write_key(sec_name, "priority", "");
-    write_key(sec_name, "running", "");
-    write_key(sec_name, "running_pid", "");
+    write_key(&sec_name, "exeName", "");
+    write_key(&sec_name, "gameWindowName", "");
+    write_key(&sec_name, "nameOfahk", "");
+    write_key(&sec_name, "pathToahk", "");
+    write_key(&sec_name, "OpenRGBprofile", "");
+    write_key(&sec_name, "voiceAttackProfile", "");
+    write_key(&sec_name, "SignalRGBprofile", "");
+    write_key(&sec_name, "game-or-win", "");
+    write_key(&sec_name, "running", "");
+    write_key(&sec_name, "running_pid", "");
 }
 
 fn delete_section(sec_name: &String){
@@ -2359,34 +2072,11 @@ fn url_encode(data: String) -> String{
 }
 
 fn test(){
-    
 
     
 }
 
-fn dark_hours(time_range: &String) -> bool {
-    let time_of_day = Local::now().time();
-    let time_vec = time_range.split("-").collect::<Vec<&str>>();
-    let end_num = &time_vec[1].parse::<u64>().unwrap();
-    let start_time = NaiveTime::parse_from_str(&time_vec[0], "%H%M").unwrap();
-    let end_time = NaiveTime::parse_from_str(&time_vec[1], "%H%M").unwrap();
-
-    if end_num < &1200 {
-        if (time_of_day > end_time) && (time_of_day < start_time) {
-            return false
-        } else {
-            return true
-        }
-    } else {
-        if (time_of_day > start_time) && (time_of_day < end_time) {
-            return true
-        } else {
-            return false
-        }
-    }
-}
-
-fn run_cmd(cmd: &String) -> Result<std::process::Child, std::io::Error>{
+async fn run_cmd(cmd: &String) -> Result<std::process::Child, std::io::Error>{
     let output = Command::new("cmd.exe")
         .creation_flags(CREATE_NO_WINDOW)
         .arg("/c")
@@ -2397,6 +2087,10 @@ fn run_cmd(cmd: &String) -> Result<std::process::Child, std::io::Error>{
 }
 
 fn close_pid(pid: u32) -> Result<std::process::Child, std::io::Error>{
+    // let win_pid = get_pid(Some("Autohotkey.exe")).unwrap();
+    // let win_hwnd = windows_win::raw::window::get_by_pid(&win_pid).unwrap();
+    // let hwnd = windows_win::raw::window::get_by_title(&ahk_name, &win_hwnd.unwrap());
+
     let kill_cmd = format!("TASKKILL /PID {}", &pid);
     let output = Command::new("cmd.exe")
     .creation_flags(CREATE_NO_WINDOW)
@@ -2407,35 +2101,30 @@ fn close_pid(pid: u32) -> Result<std::process::Child, std::io::Error>{
 return output
 }
 
-fn defaults_gui(){
-    let my = DefaultsWindow::new(); // instantiate our defaults window
+async fn defaults_gui(){
+    let my = DefaultsWindow::new(); // instantiate our main window
     if let Err(e) = my.wnd.run_main(None) { // ... and run it
         eprintln!("{}", e);
     }
 }
 
-fn main_gui(){
+async fn main_gui(){
     let my = MyWindow::new(); // instantiate our main window
     if let Err(e) = my.wnd.run_main(None) { // ... and run it
         eprintln!("{}", e);
     }
 }
 
-
 #[cfg(windows)]
-fn main() {
+#[tokio::main]
+async fn main() {
     // Initialize Setup
     reg_check();
     initialize_log();
     let _cleanup = Cleanup;
 
-    let last_error = std::io::Error::last_os_error().to_string();
-    
-    if last_error.contains("GameMon"){
-        log!(format!("Last shutdown reason: CRASH"), "e");
-    } else {
-        log!(format!("Last shutdown reason: {}", get_value("defaults".to_string(), "exit_reason".to_string()).to_string()), "w");
-    }
+    let defaults = get_defaults();
+    log!(format!("Last shutdown reason: {}", &defaults.exit_reason));
 
     // Create system tray
     let mut tray = TrayItem::new("GameMon", "my-icon-name").unwrap();
@@ -2443,21 +2132,11 @@ fn main() {
     tray.add_label("GameMon").unwrap();
     
     tray.add_menu_item("About", || {
-        let hwnd = HWND::GetDesktopWindow();
-        hwnd.MessageBox(&format!("GameMon Game Monitor\nBy Akinus21 2022\nWritten in Rust Programming Language").to_string()
-        , "About", 
-        MB::OK | MB::ICONINFORMATION).unwrap();
+        msg_box("About", &format!("GameMon Game Monitor\nBy Akinus21 2022\nWritten in Rust Programming Language").to_string());
     })
     .unwrap();
     
     let (tx, rx) = mpsc::channel();
-    let txc = tx.clone();
-    
-    tray.add_menu_item("View Logs", move || {
-        println!("Logs");
-        txc.send(Message::Logs).unwrap();
-    }).unwrap();
-
     let txc = tx.clone();
     
     tray.add_menu_item("Monitors", move || {
@@ -2485,440 +2164,213 @@ fn main() {
     /////////// test zone //////////////////
     test();
     ////////////////////////////////////////
-    
+
+    // Initialize Loop variables
+
+    // Read INI Sections and operate on each one
     loop {
-
-        let mut section;
-        let defaults;
-        let mem;
-        let hklm;
-        let path;
-        let game_mon;
-        let mut time_range;
-        let mut ss;
-        let mut cmds;
-        let mut ahk_run;
-        let mut ss_exe;
-        let mut ahk_pid;
-        let mut ahk_pid_u32;
-        let mut ahk_close;
-        let mut game_bool;
-        let mut win_flag;
-        let mut active_pid;
-        let mut active_win;
-
-        mem = System::new_all().processes_by_exact_name("GameMon.exe").last().unwrap().memory();
-
-        match mem.cmp(&"1073741824".parse::<u64>().unwrap()){
-            Ordering::Greater => {
-                exit_app!(0, "Memory allocation too high");
-            },
-            _ => ()
-        }
 
         match rx.try_recv(){
             Ok(Message::Quit) => exit_app!(1, "Menu"),
-            Ok(Message::Gui) => {
-                std::thread::spawn(|| {
-                    main_gui();
-                });
-            },
-            Ok(Message::Defaults) => {
-                std::thread::spawn(||{
-                    defaults_gui();
-                });
-            },
-            Ok(Message::Logs) => {
-                let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
-            },
+            Ok(Message::Gui) => main_gui().await,
+            Ok(Message::Defaults) => defaults_gui().await,
             _ => ()
         };
 
-        // Game and Window Reactions
-        defaults = get_defaults();
+        let s = System::new_all();
+        let procs = s.processes_by_exact_name("GameMon.exe");
 
-        hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        path = Path::new("Software").join("GameMon");
-        game_mon = hklm.open_subkey(path).unwrap();
+        for process in procs{
+            match process.memory().cmp(&"1000000000".parse::<u64>().unwrap()){
+                Ordering::Greater => {
+                    exit_app!(0, "Memory allocation too high");
+                    
+                },
+                _ => ()
+            }
+            
+        }
+
+        // Game and Window Reactions
+        let defaults = get_defaults();
+
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let path = Path::new("Software").join("GameMon");
+        let game_mon = hklm.open_subkey(&path).unwrap();
         
         for sec in game_mon.enum_keys().map(|x| x.unwrap()){
 
-            
-
-            section = match &sec.as_str() {
+            let section = match &sec.as_str() {
                 &"defaults" => continue,
                 &"General" => continue,
                 _ => get_section(&sec),
             };
-            
-            match &defaults.current_priority.parse::<u64>().unwrap().cmp(&section.priority.parse::<u64>().unwrap()) {
-                Ordering::Greater => continue, // DO NOTHING...section is lower priority than current priority
-                _ => ()
-            };
-            
+
             match &sec.as_str() {
                 &"Idle" => { // Begin Idle Reaction
-                    write_key(&sec, "exe_name", &ss_get("ScreenSaveTimeOut"));
-                    let now = unsafe { winapi::um::sysinfoapi::GetTickCount() };
-                    let mut last_input_info = LASTINPUTINFO {
-                        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
-                        dwTime: 0
-                    };
-                
-                    let p_last_input_info: PLASTINPUTINFO = &mut last_input_info as *mut LASTINPUTINFO;
-                
-                    let ok = unsafe { GetLastInputInfo(p_last_input_info) } != 0;
-                
-                    let idle_seconds = match ok {
-                        true => {
-                            let millis = now - last_input_info.dwTime;
-                            Ok(std::time::Duration::from_millis(millis as u64))
-                        },
-                        false => Err(format!("GetLastInputInfo failed"))
-                    }.unwrap().as_secs();
-                    time_range = section.game_window_name;
+                    log!(&section.exe_name, "d");
 
-                    match idle_seconds.cmp(&(&section.exe_name.parse::<u64>().unwrap() - 5)) {
+                    let idle_wait = &section.exe_name.parse::<u64>().unwrap();
+                    let idle_seconds = UserIdle::get_time().unwrap().as_seconds();
+                    let time_of_day = Local::now().time();
+                    let time_range = &section.game_window_name.split("-").collect::<Vec<&str>>();
+                    let start_time = NaiveTime::parse_from_str(time_range[0], "%H%M").unwrap();
+                    let end_time = NaiveTime::parse_from_str(time_range[1], "%H%M").unwrap();
+
+                    match idle_seconds.cmp(&idle_wait){
                         Ordering::Greater => { // PAST IDLE TIME!!!!!!
-                    
+                            
                             match &section.running.as_str() {
                                 &"False" => { //IDLE IS NOT RUNNING
-                                    
-                                    
-                                    match &defaults.gameon.as_str(){
-                                        &"True" => continue,
-                                        _ => ()
-                                    };
-
                                     //change values
-                                    write_key(&"defaults".to_string(), "current_priority", &section.priority);
+                                    
+                                    write_key("defaults", "gameon", "True");
                                     write_key(&sec, "running", "True");
-                                    write_key(&sec, "running_pid", "0");
-                                    write_key(&"General".to_string(), "running", "False");
+                                    write_key("General", "running", "False");
 
-                                    if dark_hours(&time_range) == true { // WITHIN DARK HOURS!!!!!
-                                        log!(&format!("Idle detected! Within dark hours!\nDark Hours are between {}", &time_range));
+                                    if (time_of_day > start_time) || (time_of_day < end_time) { // PAST DARK HOURS!!!!!
+                                        log!(&format!("Idle detected! After dark hours!"));
 
                                         //change profiles
-                                        log!(change_signal_rgb(&defaults.night_hour_srgb_profile));
-                                        log!(change_open_rgb(&defaults.orgb_address,
-                                            &defaults.orgb_port,
-                                            &defaults.night_hour_orgb_profile).unwrap());
+                                        log!(change_signal_rgb(&defaults.night_hour_srgb_profile).await);
+                                        log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.night_hour_orgb_profile).await);
 
                                         // Run other commands                                        
-                                        let _z = match send_message(
-                                            get_by_class("Progman",
-                                            None).unwrap()[0],
-                                            0x112,
-                                            0xF170,
-                                            2,
-                                            Some(5)) {
-                                                Ok(_) => {
-                                                    reg_write_value(&Path::new("Software").join("GameMon"),
-                                                        "display".to_string(), "off".to_string()).unwrap();
-                                                    String::from("OK")
-                                                },
-                                                Err(e) => log!(format!("Failed to turn off monitor(s)!! || Error: {}", &e), "e")
+                                        match windows_win::raw::window::send_message(
+                                            windows_win::raw::window::get_by_class("Progman", None).unwrap()[0], 0x112, 0xF170, 2 , Some(5)) {
+                                                Ok(_) => (),
+                                                Err(e) => log!(&format!("Failed to turn off monitor(s)!! || Error: {}", &e), "e")
                                         };
 
                                         match &section.other_commands.as_str() {
                                             &"" => (),
                                             s => {
                                                 for c in s.split(" && ") {
-                                                    let _f = match run_cmd(&c.to_string()) {
+                                                    let r = run_cmd(&c.to_string()).await;
+                                                    match r {
                                                         Ok(_) => log!(format!("Running {}", &c)),
                                                         Err(e) => log!(format!("Could not run {}: {}", &c, &e), "e"),
-                                                    };
+                                                    }
                                                 }
                                             }
                                         }
 
-                                    } else { // NOT WITHIN DARK HOURS!!!!
-                                        log!(&format!("Idle detected! Within day hours!\nDay hours are hours outside of the range {}", &time_range));
+                                    } else { // NOT PAST DARK HOURS!!!!
+                                        log!("Idle detected! Within Day Hours.");
 
                                         //change values
-                                        write_key(&"General".to_string(), "running", "False");
-                                        write_key(&"defaults".to_string(),
-                                            "current_priority", &section.priority);
-
-                                        //Make sure display is on
-                                        log!("Ensuring Display is ON.");
-                                        reg_write_value(&Path::new("Software").join("GameMon"),
-                                            "display".to_string(), "on".to_string()).unwrap();
+                                        write_key("defaults", "gameon", "True");
+                                        write_key("General", "running", "False");
 
                                         // Run Screensaver
-                                        ss_exe = ss_get("SCRNSAVE.EXE");
-                                        match get_pid(Some(&ss_exe)) { // Check for Screensaver
-                                            Ok(_) => {
-                                                match section.game_or_win.as_str() {
-                                                    "Yes" => {
-                                                        
-                                                        let cmd = &format!("TASKKILL /im /f {}", ss_exe);
-                                                        let r = run_cmd(cmd);
-                                                        log!(format!("Taking ownership of screensaver...\n\n{:?}", &r));
-                                                        
-                                                        //change profiles
-                                                        log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                        log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
-                                                        
-                                                        log!("Running Screensaver...");
-                                                        ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
-                                                        let _z = match run_cmd(&ss) {
-                                                            Ok(_) => String::from("OK"),
-                                                            Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
-                                                        };
-                                                    },
-                                                    _ => {
-                                                        let cmd = &format!("TASKKILL /im /f {}", ss_exe);
-                                                        let _r = run_cmd(cmd);
-                                                        //change profiles
-                                                        match section.running_pid.as_str() {
-                                                            "0" => {
-                                                                log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                log!(change_open_rgb(&defaults.orgb_address,
-                                                                    &defaults.orgb_port,
-                                                                    &section.open_rgbprofile).unwrap());
-                                                                write_key(&sec, "running_pid", "1");
-                                                            },
-                                                            _ => (),
-                                                        }
-                                                        
-                                                    },
-                                                }
-                                                
+                                        match section.game_or_win.as_str() {
+                                            "Yes" => {
+                                                log!("Running Screensaver...");
+                                                //change profiles
+                                                let signal_out = change_signal_rgb(&defaults.screensaver_srgb_profile).await;
+                                                let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).await;
+                                                log!(&signal_out);
+                                                log!(&open_out);
+                                                let ss = format!("{} /S", screensaver().await);
+                                                match run_cmd(&ss).await {
+                                                    Ok(_) => (),
+                                                    Err(e) => log!(&format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
+                                                };
                                             },
                                             _ => {
-                                                // Run Screensaver
-                                                match section.game_or_win.as_str() {
-                                                    "Yes" => {
-                                                        log!(&format!("Idle is running but screensaver not detected!"));
-                                                        //change profiles
-                                                        log!("Running Screensaver...");
-                                                        log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                        log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
-                                                        
-                                                        ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
-                                                        let _z = match run_cmd(&ss) {
-                                                            Ok(_) => String::from("OK"),
-                                                            Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
-                                                        };
-                                                    },
-                                                    _ => {
-                                                        //change profiles
-                                                        match section.running_pid.as_str() {
-                                                            "0" => {
-                                                                log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                log!(change_open_rgb(&defaults.orgb_address,
-                                                                    &defaults.orgb_port,
-                                                                    &section.open_rgbprofile).unwrap());
-                                                                write_key(&sec, "running_pid", "1");
-                                                            },
-                                                            _ => (),
-                                                        }
-                                                    },
-                                                }
-                                            }
-                                        };
+                                                //change profiles
+                                                let signal_out = change_signal_rgb(&section.signal_rgbprofile).await;
+                                                let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).await;
+                                                log!(&signal_out);
+                                                log!(&open_out);
+                                            },
+                                        }
 
                                         // Run other commands
                                         match &section.other_commands.as_str() {
                                             &"" => (),
                                             s => {
-                                                cmds = s.split(" && ");
+                                                let cmds = s.split(" && ");
                                                 for c in cmds {
-                                                    let _f = match run_cmd(&c.to_string()) {
+                                                    let r = run_cmd(&c.to_string()).await;
+                                                    match r {
                                                         Ok(_) => log!(format!("Running {}", &c)),
                                                         Err(e) => log!(format!("Could not run {}: {}", &c, &e), "e"),
-                                                    };
+                                                    }
                                                 }
                                             }
                                         }
                                         
                                     };
-                                    ahk_run = run_cmd(&section.path_toahk);
+                                    let ahk_run = run_cmd(&section.path_toahk).await;
                                     assert!(ahk_run.is_ok());
                                     log!(&format!("{} is running!", section.name_ofahk));
 
                                 },
                                 _ => { // Idle is running!
-                                    
-                                    if dark_hours(&time_range) == true { // WITHIN DARK HOURS!!!!!                                       
-                                        let _p = match d_quote!(game_mon.get_raw_value("display").unwrap().to_string().as_str()).as_str() {
-                                            "on" => { // Display is on past dark hours
-                                                //Turn off display
-                                                let _z = match send_message(
-                                                    get_by_class("Progman",
-                                                    None).unwrap()[0],
-                                                    0x112,
-                                                    0xF170,
-                                                    2,
-                                                    Some(5)) {
-                                                        Ok(_) => {
-                                                            reg_write_value(&Path::new("Software").join("GameMon"),
-                                                                "display".to_string(), "off".to_string()).unwrap();
-                                                            String::from("OK")
-                                                        },
-                                                        Err(e) => log!(format!("Failed to turn off monitor(s)!! || Error: {}", &e), "e")
-                                                };
-                                                //change profiles
-                                                log!(change_signal_rgb(&defaults.night_hour_srgb_profile));
-                                                log!(change_open_rgb(&defaults.orgb_address,
-                                                    &defaults.orgb_port,
-                                                    &defaults.night_hour_orgb_profile).unwrap());
-                                            },
-                                            _ => ()
-                                        };
-                                    } else { // Not WITHIN dark hours!    
-                                        ss_exe = ss_get("SCRNSAVE.EXE");                                    
-                                        let _p = match d_quote!(game_mon.get_raw_value("display").unwrap().to_string().as_str()).as_str() {
-                                            "off" => { // Display is off during day hours                    
-                                                log!(&format!("Idle is running; Day Hours Activated.  Turning on Display"));
-                                                //Turn on display
-                                                let mouse = Mouse::new();
-                                                mouse.move_to(0, 0).expect("Failed to turn on monitor(s)!!");
-                                                mouse.scroll(5).expect("Failed to scroll wheel!");
-                                                reg_write_value(&Path::new("Software").join("GameMon"),
-                                                    "display".to_string(), "on".to_string()).unwrap();
+                                    if (time_of_day > start_time) || (time_of_day < end_time) { // PAST DARK HOURS!!!!!
+
+                                    } else {
+                                        let ss_exe = screensaver().await;
+                                        match get_pid(Some(&ss_exe)) { // Check for Screensaver
+                                            Ok(_) => (),
+                                            _ => {
+                                                log!(&format!("Idle is running but screensaver not detected!"));
                                                 
+                                                // Run Screensaver
                                                 match section.game_or_win.as_str() {
                                                     "Yes" => {
                                                         //change profiles
-                                                        match section.running_pid.as_str() {
-                                                            "0" => {
-                                                                log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                                log!(change_open_rgb(&defaults.orgb_address,
-                                                                     &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
-                                                                write_key(&sec, "running_pid", "1");
-                                                            },
-                                                            _ => (),
-                                                        }
-                                                        
+                                                        log!("Running Screensaver...");
+                                                        let signal_out = change_signal_rgb(&defaults.screensaver_srgb_profile).await;
+                                                        let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).await;
+                                                        log!(&signal_out);
+                                                        log!(&open_out);
+                                                        let ss = format!("{} /S", screensaver().await);
+                                                        match run_cmd(&ss).await {
+                                                            Ok(_) => (),
+                                                            Err(e) => log!(&format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
+                                                        };
                                                     },
                                                     _ => {
-                                                        let cmd = &format!("TASKKILL /im /f {}", ss_exe);
-                                                        let _r = run_cmd(cmd);
                                                         //change profiles
-                                                        match section.running_pid.as_str() {
-                                                            "0" => {
-                                                                log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                log!(change_open_rgb(&defaults.orgb_address,
-                                                                    &defaults.orgb_port,
-                                                                    &section.open_rgbprofile).unwrap());
-                                                                write_key(&sec, "running_pid", "1");
-                                                            },
-                                                            _ => (),
-                                                        }
-                                                        
+                                                        let signal_out = change_signal_rgb(&section.signal_rgbprofile).await;
+                                                        let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).await;
+                                                        log!(&signal_out);
+                                                        log!(&open_out);
                                                     },
                                                 }
-                                            },
-                                            _ => {                            
-                                                match get_pid(Some(&ss_exe)) { // Check for Screensaver
-                                                    Ok(_) => {
-                                                        match section.game_or_win.as_str() {
-                                                            "Yes" => {
-                                                                
-                                                                //change profiles
-                                                                match section.running_pid.as_str() {
-                                                                    "0" => {
-                                                                        let cmd = &format!("TASKKILL /im /f {}", ss_exe);
-                                                                        let _r = run_cmd(cmd);
-
-                                                                        ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
-                                                                        let _z = match run_cmd(&ss) {
-                                                                            Ok(_) => String::from("OK"),
-                                                                            Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
-                                                                        };
-                                                                        log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                                        log!(change_open_rgb(&defaults.orgb_address,
-                                                                             &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
-                                                                        write_key(&sec, "running_pid", "1");
-                                                                    },
-                                                                    _ => (),
-                                                                }
-                                                            },
-                                                            _ => {
-                                                                let cmd = &format!("TASKKILL /im /f {}", ss_exe);
-                                                                let _r = run_cmd(cmd);
-                                                                //change profiles
-                                                                match section.running_pid.as_str() {
-                                                                    "0" => {
-                                                                        log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                        log!(change_open_rgb(&defaults.orgb_address,
-                                                                            &defaults.orgb_port,
-                                                                            &section.open_rgbprofile).unwrap());
-                                                                        write_key(&sec, "running_pid", "1");
-                                                                    },
-                                                                    _ => (),
-                                                                }
-                                                                
-                                                            },
-                                                        }
-                                                    },
-                                                    _ => {
-                                                        // Run Screensaver
-                                                        match section.game_or_win.as_str() {
-                                                            "Yes" => {
-                                                                log!(&format!("Idle is running but screensaver not detected!"));
-                                                                //change profiles
-                                                                log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                                log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
-                                                                
-                                                                log!("Running Screensaver...");
-                                                                ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
-                                                                let _z = match run_cmd(&ss) {
-                                                                    Ok(_) => String::from("OK"),
-                                                                    Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
-                                                                };
-                                                            },
-                                                            _ => {
-                                                                //change profiles
-                                                                match section.running_pid.as_str() {
-                                                                    "0" => {
-                                                                        log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                        log!(change_open_rgb(&defaults.orgb_address,
-                                                                            &defaults.orgb_port,
-                                                                            &section.open_rgbprofile).unwrap());
-                                                                        write_key(&sec, "running_pid", "1");
-                                                                    },
-                                                                    _ => (),
-                                                                }
-                                                                
-                                                            },
-                                                        }
-                                                    }
-                                                };
                                             }
                                         };
-                                        
                                     };
+
+                                    
+
                                 }
                             }
                         },
                         _ => { // NOT PAST IDLE TIME
-                            reg_write_value(&Path::new("Software").join("GameMon"),
-                                "display".to_string(), "on".to_string()).unwrap();
-
                             match &section.running.as_str() {
                                 &"True" => { //IDLE IS RUNNING
                                     log!(&format!("Idle no longer detected!"));
 
                                     //change values
-                                    write_key(&"General".to_string(), "running", "True");
+                                    write_key("General", "running", "True");
                                     write_key(&sec, "running", "False");
-                                    write_key(&sec, "running_pid", "0");
-                                    write_key(&"defaults".to_string(), "current_priority", "0");
+                                    write_key("defaults", "gameon", "False");
 
                                     //run extra commands
-                                    ahk_pid = get_ahk_pid(&sec.to_string());
+                                    let ahk_pid = ahk_pid(&sec.to_string());
                                     assert!(ahk_pid.is_ok());
-                                    ahk_pid_u32 = ahk_pid.unwrap();
+                                    let ahk_pid = ahk_pid.unwrap();
 
-                                    ahk_close = close_pid(ahk_pid_u32);
+                                    let ahk_close = close_pid(ahk_pid);
                                     assert!(ahk_close.is_ok());
                                     log!(&format!("{} is no longer running!", section.name_ofahk));
                                     
                                     log!(&format!("{}", reset_running()));
+                                    
+ 
                                 },
                                 _ => ()
                             }
@@ -2928,12 +2380,16 @@ fn main() {
 
                 _ => { // Begin ALL OTHER Reaction
 
+                    match &section.exe_name.as_str() {
+                        &"" => (),
+                        _ => ()
+                    }
+
                     match section.game_or_win.as_str() {
                         "Game" => {
                             
                             //is program running?
-                            
-                            game_bool = get_pid(Some(&section.exe_name));
+                            let game_bool = get_pid(Some(&section.exe_name));
                             match game_bool {
                                 Ok(0) => { //Program not found
                                     match &section.running.as_str() {
@@ -2941,17 +2397,16 @@ fn main() {
                                             log!(&format!("{} no longer detected!", &section.exe_name));
 
                                             //change values
-                                            write_key(&"General".to_string(), "running", "True");
+                                            write_key("General", "running", "True");
                                             write_key(&sec, "running", "False");
-                                            write_key(&"defaults".to_string(), "gameon", "False");
-                                            write_key(&"defaults".to_string(), "current_priority", "0");
+                                            write_key("defaults", "gameon", "False");
 
                                             //run extra commands
-                                            ahk_pid = get_ahk_pid(&sec.to_string());
+                                            let ahk_pid = ahk_pid(&sec.to_string());
                                             assert!(ahk_pid.is_ok());
-                                            ahk_pid_u32 = ahk_pid.unwrap();
+                                            let ahk_pid = ahk_pid.unwrap();
 
-                                            ahk_close = close_pid(ahk_pid_u32);
+                                            let ahk_close = close_pid(ahk_pid);
                                             assert!(ahk_close.is_ok());
                                             log!(&format!("{} is no longer running!", section.name_ofahk));
                                             
@@ -2969,32 +2424,46 @@ fn main() {
                                             //change values
                                             write_key(&sec, "running", "True");
                                             write_key(&sec, "running_pid", &msg.to_string());
-                                            write_key(&"General".to_string(), "running", "False");
-                                            write_key(&"defaults".to_string(), "gameon", "True");
-                                            write_key(&"defaults".to_string(), "current_priority", &section.priority);
+                                            write_key("General", "running", "False");
+                                            write_key("defaults", "gameon", "True");
 
                                             //change profiles
-                                            log!(change_signal_rgb(&section.signal_rgbprofile));
-                                            log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
-                                            
+                                            let signal_out = change_signal_rgb(&section.signal_rgbprofile).await;
+                                            let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).await;
+                                            log!(&signal_out);
+                                            log!(&open_out);
                                             match &section.voice_attack_profile.as_str() {
-                                                &"" => log!("No VoiceAttack profile found."),
-                                                _ => log!(&change_voice_attack(&section.voice_attack_profile))
+                                                &"" => (),
+                                                _ => {
+                                                    let r = Command::new(&defaults.voice_attack_path)
+                                                        .creation_flags(CREATE_NO_WINDOW)
+                                                        .arg("-profile")
+                                                        .arg(&section.voice_attack_profile)
+                                                        .spawn();
+                                                    match r {
+                                                        Ok(_) => {
+                                                            log!(format!("Changed VoiceAttack profile to {}", &section.voice_attack_profile));
+                                                            
+                                                        },
+                                                        Err(e) => log!(format!("Could not change VoiceAttack profile: {}", &e), "e"),
+                                                    }
+                                                }
                                             };
 
                                             //run extra commands
-                                            ahk_run = run_cmd(&section.path_toahk);
+                                            let ahk_run = run_cmd(&section.path_toahk).await;
                                             assert!(ahk_run.is_ok());
                                             log!(&format!("{} is running!", &section.name_ofahk));
                                             match &section.other_commands.as_str() {
                                                 &"" => (),
                                                 s => {
-                                                    cmds = s.split(" && ");
+                                                    let cmds = s.split(" && ");
                                                     for c in cmds {
-                                                        let _f = match run_cmd(&c.to_string()) {
+                                                        let r = run_cmd(&c.to_string()).await;
+                                                        match r {
                                                             Ok(_) => log!(format!("Running {}", &c)),
                                                             Err(e) => log!(format!("Could not run {}: {}", &c, &e), "e"),
-                                                        };
+                                                        }
                                                     }
                                                 }
                                             }
@@ -3009,6 +2478,7 @@ fn main() {
                                 }
                             };
 
+
                         },
                         "Window" => {
                             // is a game running?
@@ -3017,16 +2487,11 @@ fn main() {
                                 _ => ()
                             };
 
-                            match &get_value("Idle".to_string(), "running".to_owned()).as_str() {
-                                &"True" => continue,
-                                _ => ()
-                            }
-
-                            win_flag = &defaults.window_flag;
+                            let win_flag = &defaults.window_flag;
 
                             // is window active?
-                            active_pid = get_active_window().unwrap().process_id;
-                            active_win = name_by_pid(Pid::from(active_pid as usize)).unwrap();
+                            let active_pid = get_active_window().unwrap().process_id;
+                            let active_win = name_by_pid(Pid::from(active_pid as usize)).unwrap();
 
                             if &active_win == &section.exe_name{ // ** WINDOW IS ACTIVE **
                                 match &section.running.as_str() {
@@ -3036,32 +2501,46 @@ fn main() {
                                         //change values
                                         write_key(&sec, "running", "True");
                                         write_key(&sec, "running_pid", &active_pid.to_string());
-                                        write_key(&"General".to_string(), "running", "False");
-                                        write_key(&"defaults".to_string(), "window_flag", &sec);
-                                        write_key(&"defaults".to_string(), "current_priority", &section.priority);
+                                        write_key("General", "running", "False");
+                                        write_key("defaults", "window_flag", &sec);
 
                                         //change profiles
-                                        log!(change_signal_rgb(&section.signal_rgbprofile));
-                                        log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
-                                        
+                                        let signal_out = change_signal_rgb(&section.signal_rgbprofile).await;
+                                        let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).await;
+                                        log!(&signal_out);
+                                        log!(&open_out);
                                         match &section.voice_attack_profile.as_str() {
-                                            &"" => log!("No VoiceAttack profile found."),
-                                            _ => log!(&change_voice_attack(&section.voice_attack_profile))
+                                            &"" => (),
+                                            _ => {
+                                                let r = Command::new(&defaults.voice_attack_path)
+                                                    .creation_flags(CREATE_NO_WINDOW)
+                                                    .arg("-profile")
+                                                    .arg(&section.voice_attack_profile)
+                                                    .spawn();
+                                                match r {
+                                                    Ok(_) => {
+                                                        log!(format!("Changed VoiceAttack profile to {}", &section.voice_attack_profile));
+                                                        
+                                                    },
+                                                    Err(e) => log!(format!("Could not change VoiceAttack profile: {}", &e), "e"),
+                                                }
+                                            }
                                         };
 
                                         //run extra commands
-                                        ahk_run = run_cmd(&section.path_toahk);
+                                        let ahk_run = run_cmd(&section.path_toahk).await;
                                         assert!(ahk_run.is_ok());
                                         log!(&format!("{} is running!", &section.name_ofahk));
                                         match &section.other_commands.as_str() {
                                             &"" => (),
                                             s => {
-                                                cmds = s.split(" && ");
+                                                let cmds = s.split(" && ");
                                                 for c in cmds {
-                                                    let _f = match run_cmd(&c.to_string()) {
+                                                    let r = run_cmd(&c.to_string()).await;
+                                                    match r {
                                                         Ok(_) => log!(format!("Running {}", &c)),
                                                         Err(e) => log!(format!("Could not run {}: {}", &c, &e), "e"),
-                                                    };
+                                                    }
                                                 }
                                             }
                                         }
@@ -3070,16 +2549,15 @@ fn main() {
                                     },
                                     _ => {
                                         if &win_flag == &&sec {
-                                            continue;
                                         } else {
-                                            write_key(&"defaults".to_string(), "window_flag", &sec);
-                                            write_key(&"General".to_string(), "running", "False");
-                                            write_key(&"defaults".to_string(), "current_priority", &section.priority);
+                                            write_key("defaults", "window_flag", &sec);
+                                            write_key("General", "running", "False");
 
                                             //change profiles
-                                            log!(change_signal_rgb(&section.signal_rgbprofile));
-                                            log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
-                                            
+                                            let signal_out = change_signal_rgb(&section.signal_rgbprofile).await;
+                                            let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).await;
+                                            log!(&signal_out);
+                                            log!(&open_out);
                                         }
                                     }
                                 };
@@ -3091,25 +2569,26 @@ fn main() {
                                         //change values
                                         write_key(&sec, "running", "False");
                                         if &win_flag == &&sec {
-                                            write_key(&"defaults".to_string(), "window_flag", "General");
-                                            write_key(&"General".to_string(), "running", "True");
-                                            write_key(&"defaults".to_string(), "current_priority", "0");
-
+                                            write_key("defaults", "window_flag", "General");
+                                            write_key("General", "running", "True");
+                                        
                                         }
 
                                         //run extra commands
-                                        ahk_pid = get_ahk_pid(&sec.to_string());
+                                        let ahk_pid = ahk_pid(&sec.to_string());
                                         assert!(ahk_pid.is_ok());
-                                        ahk_pid_u32 = ahk_pid.unwrap();
+                                        let ahk_pid = ahk_pid.unwrap();
 
-                                        ahk_close = close_pid(ahk_pid_u32);
+                                        let ahk_close = close_pid(ahk_pid);
                                         assert!(ahk_close.is_ok());
                                         log!(&format!("{} is no longer running!", section.name_ofahk));
 
                                     },
                                     _ => {
                                         if &win_flag == &&sec {
-                                            write_key(&"defaults".to_string(), "window_flag", "General");                                            
+                                            write_key("defaults", "window_flag", "General");
+                                            
+                                            
                                         }
                                     }
                                 };
@@ -3118,39 +2597,47 @@ fn main() {
                         _ => ()
                     };
                 } //End Game or Window Reaction
-                
-            }; // End of section match
-            sleep(100);
 
-        }; // End of section "For" loop
-        section = get_section(&"General".to_string());
-        if &section.running == "True" {
-            if &section.running_pid == "0" {
-                //change profiles
-                log!(change_signal_rgb(&section.signal_rgbprofile));
-                log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
-                
-                match &section.voice_attack_profile.as_str() {
-                    &"" => log!("No VoiceAttack profile found."),
-                    _ => log!(&change_voice_attack(&section.voice_attack_profile))
+            }; // End of section match
+
+            let general = get_section(&"General".to_string());
+            
+            if &general.running == "True" {
+                if &general.running_pid == "0" {
+                    //change profiles
+                    let signal_out = change_signal_rgb(&general.signal_rgbprofile).await;
+                    let open_out = change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &general.open_rgbprofile).await;
+                    log!(&signal_out);
+                    log!(&open_out);
+                    match &general.voice_attack_profile.as_str() {
+                        &"" => (),
+                        _ => {
+                            let r = Command::new(&defaults.voice_attack_path)
+                                .creation_flags(CREATE_NO_WINDOW)
+                                .arg("-profile")
+                                .arg(&general.voice_attack_profile)
+                                .spawn();
+                            match r {
+                                Ok(_) => {
+                                    log!(format!("Changed VoiceAttack profile to {}", &general.voice_attack_profile));
+                                    
+                                },
+                                Err(e) => log!(format!("Could not change VoiceAttack profile: {}", &e), "e"),
+                            }
+                        }
+                    };
+                    
+                    write_key("General", "running_pid", "1");
+                } 
+            } else {
+                match general.running_pid.as_str() {
+                    "0" => (),
+                    _ => write_key("General", "running_pid", "0"),
                 };
             };
-                
-                write_key(&"General".to_string(), "running_pid", "1");
-                write_key(&"defaults".to_string(), "current_priority", "0");
-        } else {
-            match section.running_pid.as_str() {
-                "0" => (),
-                _ => {
-                    write_key(&"General".to_string(), "running_pid", "0");
-                }
-
-            };
-        };
-
-        
+        }; // End of section "For" loop
+        sleep(1000).await;
     };
-    
 }
 
 #[cfg(not(windows))]

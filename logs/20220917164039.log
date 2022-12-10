@@ -1,7 +1,0 @@
-"20220917162808": INFO: Log Initialized. GameMon started...
-"20220917162826": INFO: "Opera detected! Executed signalrgb://effect/apply/Pinwheel?speed=1^&lineThickness=3^&background=%23150720^&pinwheelColor=%238bff3c^&-silentlaunch-^&-silentlaunch- --> Child { stdin: None, stdout: None, stderr: None, .. }"
-"20220917162831": INFO: "Opera no longer detected!"
-"20220917162837": INFO: "Opera detected! Executed signalrgb://effect/apply/Pinwheel?speed=1^&lineThickness=3^&background=%23150720^&pinwheelColor=%238bff3c^&-silentlaunch-^&-silentlaunch- --> Child { stdin: None, stdout: None, stderr: None, .. }"
-"20220917162843": INFO: "Opera no longer detected!"
-"20220917163015": INFO: "Spotify detected! Executed signalrgb://effect/apply/Audio%20Spectrum?-silentlaunch- --> Child { stdin: None, stdout: None, stderr: None, .. }"
-"20220917163043": INFO: "Spotify no longer detected!"
