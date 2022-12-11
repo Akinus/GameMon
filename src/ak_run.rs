@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 15:59:30                          #
+// Last Modified: Sat, 10 Dec 2022 @ 22:14:55                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -14,12 +14,13 @@
 
 use std::{path::Path, process::Command, os::windows::process::CommandExt, cmp::Ordering};
 
+use sysinfo::{ProcessExt, System, SystemExt, Pid};
 use ureq::Error;
 use winapi::um::winbase::CREATE_NO_WINDOW;
 use windows_win::raw::window::{get_by_title, get_thread_process_id};
 use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
 
-use crate::{ak_utils::{url_encode, sleep}, ak_io::read::get_value};
+use crate::{ak_utils::{url_encode, sleep, macros::log}, ak_io::read::get_value};
 
 //   Import Data ####
 pub fn close_all_ahk() -> Result<(), String> {
@@ -72,27 +73,17 @@ pub fn run_cmd(cmd: &String) -> Result<std::process::Child, std::io::Error>{
 
 pub fn get_ahk_pid(sec: &String) -> Result<u32, String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let autohotkey = hklm.open_subkey("SOFTWARE\\AutoHotkey").unwrap();
-    let version: String = autohotkey.get_value("Version").unwrap();
     let path = Path::new("Software").join("GameMon").join(&sec);
     let game_mon = hklm.open_subkey(&path).unwrap();
     let ahk: String = game_mon.get_value("path_toahk").unwrap();
 
-    let title =format!("{} - AutoHotkey v{}", ahk, version);
-
-    let find_window = get_by_title(&title, None);
-    assert!(find_window.is_ok());
-    
-    let find_window = find_window.unwrap();
-    match find_window.len().cmp(&0) {
-        Ordering::Greater => {
-            for w in find_window {
-                let w_pid = get_thread_process_id(w);
-                return Ok(w_pid.0);
-            };
-        },
-        _ => {
-            return Err("NONE".to_string())
+    let binding = System::new_all();
+    let v_ahk_pid = binding.processes_by_exact_name("AutoHotkey.exe");
+    for p in v_ahk_pid{
+        let t_p = p.cmd().to_owned();
+        let cmd_line = t_p.last().unwrap();
+        if cmd_line.contains(&ahk) {
+            return Ok(p.pid().to_string().parse::<u32>().unwrap());
         }
     }
     
@@ -170,8 +161,7 @@ pub fn change_signal_rgb(profile: &String) -> String{
         Err(e) => format!("Could not execute SignalRGB Command: {}: {:?}", &command_var, e),
         Ok(_) => format!("Changed SignalRGB to {}", &sp)
     };
-    
-    sleep(1000);
+    sleep(250);
     return return_var;
 }
 
@@ -189,7 +179,6 @@ pub fn change_open_rgb(addy: &String, port: &String, profile: &String) -> Result
             Err(Error::Status(code, response)) => Err(format!("ERROR: {}", Error::Status(code, response))),
             transport => Err(format!("ERROR: {}", Error::from(transport.unwrap())))
         }
-
 }
 
 pub fn change_voice_attack(profile: &String) -> String {
