@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 15:59:14                          #
+// Last Modified: Sun, 11 Dec 2022 @ 13:03:49                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -94,6 +94,11 @@ pub mod read {
                 other_commands: "".to_string(),
                 priority: "".to_string()
             }
+        }
+    }
+
+    impl Drop for Instance{
+        fn drop(&mut self) {
         }
     }
 

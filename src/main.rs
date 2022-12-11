@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 11 Dec 2022 @ 12:24:28                          #
+// Last Modified: Sun, 11 Dec 2022 @ 12:58:43                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -176,14 +176,16 @@ fn main() {
             match rx.try_recv(){
                 Ok(Message::Quit) => exit_app!(1, "Menu"),
                 Ok(Message::Gui) => {
-                    std::thread::spawn(|| {
+                    let t = std::thread::spawn(|| {
                         main_gui();
                     });
+                    t.join().unwrap();
                 },
                 Ok(Message::Defaults) => {
-                    std::thread::spawn(||{
+                    let t = std::thread::spawn(||{
                         defaults_gui();
                     });
+                    t.join().unwrap();
                 },
                 Ok(Message::Logs) => {
                     let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
@@ -257,7 +259,7 @@ fn main() {
                             },
                             false => Err(format!("GetLastInputInfo failed"))
                         }.unwrap().as_secs();
-                        time_range = section.game_window_name;
+                        time_range = &section.game_window_name;
 
                         match idle_seconds.cmp(&(&section.exe_name.parse::<u64>().unwrap() - 5)) {
                             Ordering::Greater => { // PAST IDLE TIME!!!!!!
@@ -774,7 +776,14 @@ fn main() {
                                         },
                                         _ => {
                                             if &win_flag == &&sec {
-                                                write_key(&"defaults".to_string(), "window_flag", "General");                                            
+                                                if get_value("General".to_string(), "running".to_string()) == "True" {
+                                                    if &section.running_pid == "0" {
+                                                        write_key(&"defaults".to_string(), "window_flag", "General");
+                                                        write_key(&"General".to_string(), "running_pid", "1");
+                                                        write_key(&"defaults".to_string(), "current_priority", "0");
+                                                    };
+                                                }
+                                                                                            
                                             }
                                         }
                                     };
@@ -791,9 +800,8 @@ fn main() {
             sleep(150);
             check.join().unwrap();
         }; // End of section "For" loop
-        
-        let section = get_section(&"General".to_string());
-        if &section.running == "True" {
+        if get_value("General".to_string(), "running".to_string()) == "True" {
+            let section = get_section(&"General".to_string());
             if &section.running_pid == "0" {
                 //change profiles
                 log!(change_signal_rgb(&section.signal_rgbprofile));
@@ -808,7 +816,7 @@ fn main() {
                 write_key(&"General".to_string(), "running_pid", "1");
                 write_key(&"defaults".to_string(), "current_priority", "0");
         } else {
-            match section.running_pid.as_str() {
+            match get_value("General".to_string(), "running_pid".to_string()).as_str() {
                 "0" => (),
                 _ => {
                     write_key(&"General".to_string(), "running_pid", "0");
