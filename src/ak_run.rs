@@ -5,22 +5,22 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 22:30:12                          #
+// Last Modified: Sat, 10 Dec 2022 @ 22:52:57                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
 // ----------	---	-------------------------------------------------- #
 // #####################################################################
 
-use std::{path::Path, process::Command, os::windows::process::CommandExt, cmp::Ordering};
+use std::{path::Path, process::Command, os::windows::process::CommandExt};
 
-use sysinfo::{ProcessExt, System, SystemExt, Pid};
+use sysinfo::{ProcessExt, System, SystemExt};
 use ureq::Error;
 use winapi::um::winbase::CREATE_NO_WINDOW;
-use windows_win::raw::window::{get_by_title, get_thread_process_id};
+
 use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
 
-use crate::{ak_utils::{url_encode, sleep, macros::log}, ak_io::read::get_value};
+use crate::{ak_utils::{url_encode, sleep}, ak_io::read::get_value};
 
 //   Import Data ####
 pub fn close_all_ahk() -> Result<(), String> {
