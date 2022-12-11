@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 22:46:50                          #
+// Last Modified: Sun, 11 Dec 2022 @ 12:24:28                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -197,7 +197,7 @@ fn main() {
         
         for sec in hklm.open_subkey(path).unwrap().enum_keys().map(|x| x.unwrap()){
 
-            std::thread::spawn(move || {
+            let check = std::thread::spawn(move || {
             
                 let section;
                 // let defaults = get_defaults();
@@ -787,8 +787,11 @@ fn main() {
                 }; // End of section match
 
             }); //End of Thread
+
             sleep(150);
+            check.join().unwrap();
         }; // End of section "For" loop
+        
         let section = get_section(&"General".to_string());
         if &section.running == "True" {
             if &section.running_pid == "0" {
