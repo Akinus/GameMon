@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 22:14:55                          #
+// Last Modified: Sat, 10 Dec 2022 @ 22:30:12                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -165,10 +165,12 @@ pub fn change_signal_rgb(profile: &String) -> String{
     return return_var;
 }
 
-pub fn change_open_rgb(addy: &String, port: &String, profile: &String) -> Result<String, String> {
+pub fn change_open_rgb(profile: &String) -> Result<String, String> {
+    let addy = get_value("defaults".to_string(), "orgb_address".to_string());
+    let port = get_value("defaults".to_string(), "orgb_port".to_string());
     let rgb_profile = url_encode(profile.to_string());
     let command_var = format!("http://{}:{}/{}", addy, port, &rgb_profile);
-
+    
     return match ureq::post(&command_var)
         .set("User-Agent",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36")

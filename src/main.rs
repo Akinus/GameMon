@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 22:11:01                          #
+// Last Modified: Sat, 10 Dec 2022 @ 22:46:50                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -70,7 +70,6 @@ use ak_io::{
             ss_get,
             get_value,
             reg_check,
-            get_defaults,
             get_pid,
             name_by_pid
         },
@@ -201,7 +200,7 @@ fn main() {
             std::thread::spawn(move || {
             
                 let section;
-                let defaults = get_defaults();
+                // let defaults = get_defaults();
                 let time_range;
                 let ss;
                 let cmds;
@@ -214,6 +213,14 @@ fn main() {
                 let win_flag;
                 let active_pid;
                 let active_win;
+                let current_priority = get_value("defaults".to_string(), "current_priority".to_string());
+                let game_on = get_value("defaults".to_string(), "gameon".to_string());
+                let night_srgb = get_value("defaults".to_string(), "night_hour_srgb_profile".to_string());
+                let night_orgb = get_value("defaults".to_string(), "night_hour_orgb_profile".to_string());
+                let ss_srgb = get_value("defaults".to_string(), "screensaver_srgb_profile".to_string());
+                let ss_orgb = get_value("defaults".to_string(), "screensaver_orgb_profile".to_string());
+                let window_flag = get_value("defaults".to_string(), "window_flag".to_string());
+
 
                 let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                 let path = Path::new("Software").join("GameMon");
@@ -225,7 +232,7 @@ fn main() {
                     _ => get_section(&sec),
                 };
                 
-                match &defaults.current_priority.parse::<u64>().unwrap().cmp(&section.priority.parse::<u64>().unwrap()) {
+                match &current_priority.parse::<u64>().unwrap().cmp(&section.priority.parse::<u64>().unwrap()) {
                     Ordering::Greater => return, // DO NOTHING...section is lower priority than current priority
                     _ => ()
                 };
@@ -259,7 +266,7 @@ fn main() {
                                     &"False" => { //IDLE IS NOT RUNNING
                                         
                                         
-                                        match &defaults.gameon.as_str(){
+                                        match &game_on.as_str() {
                                             &"True" => return,
                                             _ => ()
                                         };
@@ -274,10 +281,8 @@ fn main() {
                                             log!(&format!("Idle detected! Within dark hours!\nDark Hours are between {}", &time_range));
 
                                             //change profiles
-                                            log!(change_signal_rgb(&defaults.night_hour_srgb_profile));
-                                            log!(change_open_rgb(&defaults.orgb_address,
-                                                &defaults.orgb_port,
-                                                &defaults.night_hour_orgb_profile).unwrap());
+                                            log!(change_signal_rgb(&night_srgb));
+                                            log!(change_open_rgb(&night_orgb).unwrap());
 
                                             // Run other commands                                        
                                             let _z = match send_message(
@@ -332,8 +337,8 @@ fn main() {
                                                             log!(format!("Taking ownership of screensaver...\n\n{:?}", &r));
                                                             
                                                             //change profiles
-                                                            log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                            log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
+                                                            log!(change_signal_rgb(&ss_srgb));
+                                                            log!(change_open_rgb(&ss_orgb).unwrap());
                                                             
                                                             log!("Running Screensaver...");
                                                             ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
@@ -349,9 +354,7 @@ fn main() {
                                                             match section.running_pid.as_str() {
                                                                 "0" => {
                                                                     log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                    log!(change_open_rgb(&defaults.orgb_address,
-                                                                        &defaults.orgb_port,
-                                                                        &section.open_rgbprofile).unwrap());
+                                                                    log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                                                     write_key(&sec, "running_pid", "1");
                                                                 },
                                                                 _ => (),
@@ -368,8 +371,8 @@ fn main() {
                                                             log!(&format!("Idle is running but screensaver not detected!"));
                                                             //change profiles
                                                             log!("Running Screensaver...");
-                                                            log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                            log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
+                                                            log!(change_signal_rgb(&ss_srgb));
+                                                            log!(change_open_rgb(&ss_orgb).unwrap());
                                                             
                                                             ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
                                                             let _z = match run_cmd(&ss) {
@@ -382,9 +385,7 @@ fn main() {
                                                             match section.running_pid.as_str() {
                                                                 "0" => {
                                                                     log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                    log!(change_open_rgb(&defaults.orgb_address,
-                                                                        &defaults.orgb_port,
-                                                                        &section.open_rgbprofile).unwrap());
+                                                                    log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                                                     write_key(&sec, "running_pid", "1");
                                                                 },
                                                                 _ => (),
@@ -435,10 +436,8 @@ fn main() {
                                                             Err(e) => log!(format!("Failed to turn off monitor(s)!! || Error: {}", &e), "e")
                                                     };
                                                     //change profiles
-                                                    log!(change_signal_rgb(&defaults.night_hour_srgb_profile));
-                                                    log!(change_open_rgb(&defaults.orgb_address,
-                                                        &defaults.orgb_port,
-                                                        &defaults.night_hour_orgb_profile).unwrap());
+                                                    log!(change_signal_rgb(&night_srgb));
+                                                    log!(change_open_rgb(&night_orgb).unwrap());
                                                 },
                                                 _ => ()
                                             };
@@ -459,9 +458,8 @@ fn main() {
                                                             //change profiles
                                                             match section.running_pid.as_str() {
                                                                 "0" => {
-                                                                    log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                                    log!(change_open_rgb(&defaults.orgb_address,
-                                                                        &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
+                                                                    log!(change_signal_rgb(&ss_srgb));
+                                                                    log!(change_open_rgb(&ss_orgb).unwrap());
                                                                     write_key(&sec, "running_pid", "1");
                                                                 },
                                                                 _ => (),
@@ -475,9 +473,7 @@ fn main() {
                                                             match section.running_pid.as_str() {
                                                                 "0" => {
                                                                     log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                    log!(change_open_rgb(&defaults.orgb_address,
-                                                                        &defaults.orgb_port,
-                                                                        &section.open_rgbprofile).unwrap());
+                                                                    log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                                                     write_key(&sec, "running_pid", "1");
                                                                 },
                                                                 _ => (),
@@ -503,9 +499,8 @@ fn main() {
                                                                                 Ok(_) => String::from("OK"),
                                                                                 Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
                                                                             };
-                                                                            log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                                            log!(change_open_rgb(&defaults.orgb_address,
-                                                                                &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
+                                                                            log!(change_signal_rgb(&ss_srgb));
+                                                                            log!(change_open_rgb(&ss_orgb).unwrap());
                                                                             write_key(&sec, "running_pid", "1");
                                                                         },
                                                                         _ => (),
@@ -518,9 +513,7 @@ fn main() {
                                                                     match section.running_pid.as_str() {
                                                                         "0" => {
                                                                             log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                            log!(change_open_rgb(&defaults.orgb_address,
-                                                                                &defaults.orgb_port,
-                                                                                &section.open_rgbprofile).unwrap());
+                                                                            log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                                                             write_key(&sec, "running_pid", "1");
                                                                         },
                                                                         _ => (),
@@ -535,8 +528,8 @@ fn main() {
                                                                 "Yes" => {
                                                                     log!(&format!("Idle is running but screensaver not detected!"));
                                                                     //change profiles
-                                                                    log!(change_signal_rgb(&defaults.screensaver_srgb_profile));
-                                                                    log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &defaults.screensaver_orgb_profile).unwrap());
+                                                                    log!(change_signal_rgb(&ss_srgb));
+                                                                    log!(change_open_rgb(&ss_orgb).unwrap());
                                                                     
                                                                     log!("Running Screensaver...");
                                                                     ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
@@ -550,9 +543,7 @@ fn main() {
                                                                     match section.running_pid.as_str() {
                                                                         "0" => {
                                                                             log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                            log!(change_open_rgb(&defaults.orgb_address,
-                                                                                &defaults.orgb_port,
-                                                                                &section.open_rgbprofile).unwrap());
+                                                                            log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                                                             write_key(&sec, "running_pid", "1");
                                                                         },
                                                                         _ => (),
@@ -649,7 +640,7 @@ fn main() {
 
                                                 //change profiles
                                                 log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
+                                                log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                                 
                                                 match &section.voice_attack_profile.as_str() {
                                                     &"" => log!("No VoiceAttack profile found."),
@@ -686,7 +677,7 @@ fn main() {
                             },
                             "Window" => {
                                 // is a game running?
-                                match &defaults.gameon.as_str() {
+                                match &game_on.as_str() {
                                     &"True" => return,
                                     _ => ()
                                 };
@@ -696,7 +687,7 @@ fn main() {
                                     _ => ()
                                 }
 
-                                win_flag = &defaults.window_flag;
+                                win_flag = &window_flag;
 
                                 // is window active?
                                 active_pid = get_active_window().unwrap().process_id;
@@ -716,7 +707,7 @@ fn main() {
 
                                             //change profiles
                                             log!(change_signal_rgb(&section.signal_rgbprofile));
-                                            log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
+                                            log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                             
                                             match &section.voice_attack_profile.as_str() {
                                                 &"" => log!("No VoiceAttack profile found."),
@@ -752,7 +743,7 @@ fn main() {
 
                                                 //change profiles
                                                 log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
+                                                log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                                                 
                                             }
                                         }
@@ -796,15 +787,14 @@ fn main() {
                 }; // End of section match
 
             }); //End of Thread
-            sleep(100);
+            sleep(150);
         }; // End of section "For" loop
-        let defaults = get_defaults();
         let section = get_section(&"General".to_string());
         if &section.running == "True" {
             if &section.running_pid == "0" {
                 //change profiles
                 log!(change_signal_rgb(&section.signal_rgbprofile));
-                log!(change_open_rgb(&defaults.orgb_address, &defaults.orgb_port, &section.open_rgbprofile).unwrap());
+                log!(change_open_rgb(&section.open_rgbprofile).unwrap());
                 
                 match &section.voice_attack_profile.as_str() {
                     &"" => log!("No VoiceAttack profile found."),
@@ -823,7 +813,6 @@ fn main() {
 
             };
         };
-        sleep(1000);
     };
     
 }
