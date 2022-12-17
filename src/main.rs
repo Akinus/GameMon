@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Fri, 16 Dec 2022 @ 20:47:22                          #
+// Last Modified: Sat, 17 Dec 2022 @ 8:23:38                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -89,13 +89,15 @@ use ak_utils::{
 };
 use ak_gui::windows::{
     main_gui,
-    defaults_gui
+    defaults_gui, 
+    msg_box
 };
 
 
 #[cfg(windows)]
 fn main() {
     // Initialize Setup
+
     reg_check();
     initialize_log();
     let _cleanup = Cleanup;
@@ -105,7 +107,7 @@ fn main() {
     if last_error.contains("GameMon"){
         log!(format!("Last shutdown reason: CRASH"), "e");
     } else {
-        log!(format!("Last shutdown reason: {}", get_value("defaults".to_string(), "exit_reason".to_string()).to_string()), "w");
+        log!(format!("Last shutdown reason: {}", get_value("defaults".to_string(), "exit_reason".to_string())), "w");
     }
 
     // Create system tray
@@ -117,7 +119,7 @@ fn main() {
     
     tray.add_menu_item("About", || {
         let hwnd = HWND::GetDesktopWindow();
-        hwnd.MessageBox(&format!("GameMon Game Monitor\nBy Akinus21 2022\nWritten in Rust Programming Language").to_string()
+        hwnd.MessageBox("GameMon Game Monitor\nBy Akinus21 2022\nWritten in Rust Programming Language"
         , "About", 
         MB::OK | MB::ICONINFORMATION).unwrap();
     })
@@ -153,24 +155,15 @@ fn main() {
         txc.send(Message::Quit).unwrap();
     })
     .unwrap();
-
     
     loop {
 
-        
-        let mem;
-        let hklm;
-        let path;
-        
+        let mem = System::new_all().processes_by_exact_name("GameMon.exe").last().unwrap().memory();
 
-        mem = System::new_all().processes_by_exact_name("GameMon.exe").last().unwrap().memory();
-
-        match mem.cmp(&"1073741824".parse::<u64>().unwrap()){
-            Ordering::Greater => {
-                exit_app!(0, "Memory allocation too high");
-            },
-            _ => ()
-        }
+        if mem.cmp(&"1073741824".parse::<u64>().unwrap()) == Ordering::Greater {
+            exit_app!(0, "Memory allocation too high");
+        };
+        
 
         'channel: loop {
             match rx.try_recv(){
@@ -194,13 +187,15 @@ fn main() {
             };
         }
 
-        hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        path = Path::new("Software").join("GameMon");
+        
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let path = Path::new("Software").join("GameMon");
         
         for sec in hklm.open_subkey(path).unwrap().enum_keys().map(|x| x.unwrap()){
-            let section = match &sec.as_str() {
-                &"defaults" => continue,
-                &"General" => continue,
+            
+            let section = match sec.as_str() {
+                "defaults" => continue,
+                "General" => continue,
                 _ => get_section(&sec),
             };
 
@@ -232,10 +227,10 @@ fn main() {
                 let path = Path::new("Software").join("GameMon");
                 let game_mon = hklm.open_subkey(path).unwrap();
 
-                match &current_priority.parse::<u64>().unwrap().cmp(&section.priority.parse::<u64>().unwrap()) {
-                    Ordering::Greater => return, // DO NOTHING...section is lower priority than current priority
-                    _ => ()
+                if current_priority.parse::<u64>().unwrap().cmp(&section.priority.parse::<u64>().unwrap()) == Ordering::Greater {
+                    return  // DO NOTHING...section is lower priority than current priority
                 };
+                
                 
                 match &sec.as_str() {
                     &"Idle" => { // Begin Idle Reaction
@@ -255,7 +250,7 @@ fn main() {
                                 let millis = now - last_input_info.dwTime;
                                 Ok(std::time::Duration::from_millis(millis as u64))
                             },
-                            false => Err(format!("GetLastInputInfo failed"))
+                            false => Err("GetLastInputInfo failed".to_string())
                         }.unwrap().as_secs();
                         time_range = &section.game_window_name;
 
@@ -266,9 +261,8 @@ fn main() {
                                     &"False" => { //IDLE IS NOT RUNNING
                                         
                                         
-                                        match &game_on.as_str() {
-                                            &"True" => return,
-                                            _ => ()
+                                        if game_on.as_str() == "True" {
+                                            return
                                         };
 
                                         //change values
@@ -277,7 +271,7 @@ fn main() {
                                         write_key(&sec, "running_pid", "0");
                                         write_key(&"General".to_string(), "running", "False");
 
-                                        if dark_hours(&time_range) == true { // WITHIN DARK HOURS!!!!!
+                                        if dark_hours(time_range) { // WITHIN DARK HOURS!!!!!
                                             log!(&format!("Idle detected! Within dark hours!\nDark Hours are between {}", &time_range));
 
                                             //change profiles
@@ -332,7 +326,7 @@ fn main() {
                                                     match section.game_or_win.as_str() {
                                                         "Yes" => {
                                                             
-                                                            let cmd = &format!("TASKKILL /im /f {}", ss_exe);
+                                                            let cmd = &format!("TASKKILL /im /f {ss_exe}");
                                                             let r = run_cmd(cmd);
                                                             log!(format!("Taking ownership of screensaver...\n\n{:?}", &r));
                                                             
@@ -348,18 +342,14 @@ fn main() {
                                                             };
                                                         },
                                                         _ => {
-                                                            let cmd = &format!("TASKKILL /im /f {}", ss_exe);
+                                                            let cmd = &format!("TASKKILL /im /f {ss_exe}");
                                                             let _r = run_cmd(cmd);
                                                             //change profiles
-                                                            match section.running_pid.as_str() {
-                                                                "0" => {
-                                                                    log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                    log!(change_open_rgb(&section.open_rgbprofile).unwrap());
-                                                                    write_key(&sec, "running_pid", "1");
-                                                                },
-                                                                _ => (),
-                                                            }
-                                                            
+                                                            if section.running_pid.as_str() == "0" {
+                                                                log!(change_signal_rgb(&section.signal_rgbprofile));
+                                                                log!(change_open_rgb(&section.open_rgbprofile).unwrap());
+                                                                write_key(&sec, "running_pid", "1");
+                                                            };
                                                         },
                                                     }
                                                     
@@ -368,7 +358,7 @@ fn main() {
                                                     // Run Screensaver
                                                     match section.game_or_win.as_str() {
                                                         "Yes" => {
-                                                            log!(&format!("Idle is running but screensaver not detected!"));
+                                                            log!("Idle is running but screensaver not detected!".to_string());
                                                             //change profiles
                                                             log!("Running Screensaver...");
                                                             log!(change_signal_rgb(&ss_srgb));
@@ -382,14 +372,11 @@ fn main() {
                                                         },
                                                         _ => {
                                                             //change profiles
-                                                            match section.running_pid.as_str() {
-                                                                "0" => {
-                                                                    log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                    log!(change_open_rgb(&section.open_rgbprofile).unwrap());
-                                                                    write_key(&sec, "running_pid", "1");
-                                                                },
-                                                                _ => (),
-                                                            }
+                                                            if section.running_pid.as_str() == "0" {
+                                                                log!(change_signal_rgb(&section.signal_rgbprofile));
+                                                                log!(change_open_rgb(&section.open_rgbprofile).unwrap());
+                                                                write_key(&sec, "running_pid", "1");
+                                                            };
                                                         },
                                                     }
                                                 }
@@ -417,35 +404,33 @@ fn main() {
                                     },
                                     _ => { // Idle is running!
                                         
-                                        if dark_hours(&time_range) == true { // WITHIN DARK HOURS!!!!!                                       
-                                            let _p = match d_quote!(game_mon.get_raw_value("display").unwrap().to_string().as_str()).as_str() {
-                                                "on" => { // Display is on past dark hours
-                                                    //Turn off display
-                                                    let _z = match send_message(
-                                                        get_by_class("Progman",
-                                                        None).unwrap()[0],
-                                                        0x112,
-                                                        0xF170,
-                                                        2,
-                                                        Some(5)) {
-                                                            Ok(_) => {
-                                                                reg_write_value(&Path::new("Software").join("GameMon"),
-                                                                    "display".to_string(), "off".to_string()).unwrap();
-                                                                String::from("OK")
-                                                            },
-                                                            Err(e) => log!(format!("Failed to turn off monitor(s)!! || Error: {}", &e), "e")
-                                                    };
-                                                    //change profiles
-                                                    log!(change_signal_rgb(&night_srgb));
-                                                    log!(change_open_rgb(&night_orgb).unwrap());
-                                                },
-                                                _ => ()
-                                            };
+                                        if dark_hours(time_range) { // WITHIN DARK HOURS!!!!!                                       
+                                            if d_quote!(game_mon.get_raw_value("display").unwrap().to_string().as_str()).as_str() == "on" { // Display is on past dark hours
+                                                //Turn off display
+                                                let _z = match send_message(
+                                                    get_by_class("Progman",
+                                                    None).unwrap()[0],
+                                                    0x112,
+                                                    0xF170,
+                                                    2,
+                                                    Some(5)) {
+                                                        Ok(_) => {
+                                                            reg_write_value(&Path::new("Software").join("GameMon"),
+                                                                "display".to_string(), "off".to_string()).unwrap();
+                                                            String::from("OK")
+                                                        },
+                                                        Err(e) => log!(format!("Failed to turn off monitor(s)!! || Error: {}", &e), "e")
+                                                };
+                                                //change profiles
+                                                log!(change_signal_rgb(&night_srgb));
+                                                log!(change_open_rgb(&night_orgb).unwrap());
+                                            }
+
                                         } else { // Not WITHIN dark hours!    
                                             ss_exe = ss_get("SCRNSAVE.EXE");                                    
-                                            let _p = match d_quote!(game_mon.get_raw_value("display").unwrap().to_string().as_str()).as_str() {
+                                            match d_quote!(game_mon.get_raw_value("display").unwrap().to_string().as_str()).as_str() {
                                                 "off" => { // Display is off during day hours                    
-                                                    log!(&format!("Idle is running; Day Hours Activated.  Turning on Display"));
+                                                    log!("Idle is running; Day Hours Activated.  Turning on Display".to_string());
                                                     //Turn on display
                                                     let mouse = Mouse::new();
                                                     mouse.move_to(0, 0).expect("Failed to turn on monitor(s)!!");
@@ -456,28 +441,22 @@ fn main() {
                                                     match section.game_or_win.as_str() {
                                                         "Yes" => {
                                                             //change profiles
-                                                            match section.running_pid.as_str() {
-                                                                "0" => {
-                                                                    log!(change_signal_rgb(&ss_srgb));
-                                                                    log!(change_open_rgb(&ss_orgb).unwrap());
-                                                                    write_key(&sec, "running_pid", "1");
-                                                                },
-                                                                _ => (),
-                                                            }
+                                                            if section.running_pid.as_str() == "0" {
+                                                                log!(change_signal_rgb(&ss_srgb));
+                                                                log!(change_open_rgb(&ss_orgb).unwrap());
+                                                                write_key(&sec, "running_pid", "1");
+                                                            };
                                                             
                                                         },
                                                         _ => {
-                                                            let cmd = &format!("TASKKILL /im /f {}", ss_exe);
+                                                            let cmd = &format!("TASKKILL /im /f {ss_exe}");
                                                             let _r = run_cmd(cmd);
                                                             //change profiles
-                                                            match section.running_pid.as_str() {
-                                                                "0" => {
-                                                                    log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                    log!(change_open_rgb(&section.open_rgbprofile).unwrap());
-                                                                    write_key(&sec, "running_pid", "1");
-                                                                },
-                                                                _ => (),
-                                                            }
+                                                            if section.running_pid.as_str() == "0" {
+                                                                log!(change_signal_rgb(&section.signal_rgbprofile));
+                                                                log!(change_open_rgb(&section.open_rgbprofile).unwrap());
+                                                                write_key(&sec, "running_pid", "1");
+                                                            };
                                                             
                                                         },
                                                     }
@@ -489,35 +468,29 @@ fn main() {
                                                                 "Yes" => {
                                                                     
                                                                     //change profiles
-                                                                    match section.running_pid.as_str() {
-                                                                        "0" => {
-                                                                            let cmd = &format!("TASKKILL /im /f {}", ss_exe);
-                                                                            let _r = run_cmd(cmd);
+                                                                    if section.running_pid.as_str() == "0" {
+                                                                        let cmd = &format!("TASKKILL /im /f {ss_exe}");
+                                                                        let _r = run_cmd(cmd);
 
-                                                                            ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
-                                                                            let _z = match run_cmd(&ss) {
-                                                                                Ok(_) => String::from("OK"),
-                                                                                Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
-                                                                            };
-                                                                            log!(change_signal_rgb(&ss_srgb));
-                                                                            log!(change_open_rgb(&ss_orgb).unwrap());
-                                                                            write_key(&sec, "running_pid", "1");
-                                                                        },
-                                                                        _ => (),
-                                                                    }
+                                                                        ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
+                                                                        let _z = match run_cmd(&ss) {
+                                                                            Ok(_) => String::from("OK"),
+                                                                            Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
+                                                                        };
+                                                                        log!(change_signal_rgb(&ss_srgb));
+                                                                        log!(change_open_rgb(&ss_orgb).unwrap());
+                                                                        write_key(&sec, "running_pid", "1");
+                                                                    };
                                                                 },
                                                                 _ => {
-                                                                    let cmd = &format!("TASKKILL /im /f {}", ss_exe);
+                                                                    let cmd = &format!("TASKKILL /im /f {ss_exe}");
                                                                     let _r = run_cmd(cmd);
                                                                     //change profiles
-                                                                    match section.running_pid.as_str() {
-                                                                        "0" => {
-                                                                            log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                            log!(change_open_rgb(&section.open_rgbprofile).unwrap());
-                                                                            write_key(&sec, "running_pid", "1");
-                                                                        },
-                                                                        _ => (),
-                                                                    }
+                                                                    if section.running_pid.as_str() == "0" {
+                                                                        log!(change_signal_rgb(&section.signal_rgbprofile));
+                                                                        log!(change_open_rgb(&section.open_rgbprofile).unwrap());
+                                                                        write_key(&sec, "running_pid", "1");
+                                                                    };
                                                                     
                                                                 },
                                                             }
@@ -526,7 +499,7 @@ fn main() {
                                                             // Run Screensaver
                                                             match section.game_or_win.as_str() {
                                                                 "Yes" => {
-                                                                    log!(&format!("Idle is running but screensaver not detected!"));
+                                                                    log!("Idle is running but screensaver not detected!".to_string());
                                                                     //change profiles
                                                                     log!(change_signal_rgb(&ss_srgb));
                                                                     log!(change_open_rgb(&ss_orgb).unwrap());
@@ -540,15 +513,11 @@ fn main() {
                                                                 },
                                                                 _ => {
                                                                     //change profiles
-                                                                    match section.running_pid.as_str() {
-                                                                        "0" => {
-                                                                            log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                                            log!(change_open_rgb(&section.open_rgbprofile).unwrap());
-                                                                            write_key(&sec, "running_pid", "1");
-                                                                        },
-                                                                        _ => (),
-                                                                    }
-                                                                    
+                                                                    if section.running_pid.as_str() == "0" {
+                                                                        log!(change_signal_rgb(&section.signal_rgbprofile));
+                                                                        log!(change_open_rgb(&section.open_rgbprofile).unwrap());
+                                                                        write_key(&sec, "running_pid", "1");
+                                                                    };
                                                                 },
                                                             }
                                                         }
@@ -564,29 +533,26 @@ fn main() {
                                 reg_write_value(&Path::new("Software").join("GameMon"),
                                     "display".to_string(), "on".to_string()).unwrap();
 
-                                match &section.running.as_str() {
-                                    &"True" => { //IDLE IS RUNNING
-                                        log!(&format!("Idle no longer detected!"));
+                                if section.running.as_str() == "True" { //IDLE IS RUNNING
+                                    log!("Idle no longer detected!".to_string());
 
-                                        //change values
-                                        write_key(&"General".to_string(), "running", "True");
-                                        write_key(&sec, "running", "False");
-                                        write_key(&sec, "running_pid", "0");
-                                        write_key(&"defaults".to_string(), "current_priority", "0");
+                                    //change values
+                                    write_key(&"General".to_string(), "running", "True");
+                                    write_key(&sec, "running", "False");
+                                    write_key(&sec, "running_pid", "0");
+                                    write_key(&"defaults".to_string(), "current_priority", "0");
 
-                                        //run extra commands
-                                        ahk_pid = get_ahk_pid(&sec.to_string());
-                                        assert!(ahk_pid.is_ok());
-                                        ahk_pid_u32 = ahk_pid.unwrap();
+                                    //run extra commands
+                                    ahk_pid = get_ahk_pid(&sec.to_string());
+                                    assert!(ahk_pid.is_ok());
+                                    ahk_pid_u32 = ahk_pid.unwrap();
 
-                                        ahk_close = close_pid(ahk_pid_u32);
-                                        assert!(ahk_close.is_ok());
-                                        log!(&format!("{} is no longer running!", section.name_ofahk));
-                                        
-                                        log!(&format!("{}", reset_running()));
-                                    },
-                                    _ => return
-                                }
+                                    ahk_close = close_pid(ahk_pid_u32);
+                                    assert!(ahk_close.is_ok());
+                                    log!(&format!("{} is no longer running!", section.name_ofahk));
+                                    
+                                    log!(reset_running());
+                                };
                             }
                         };
                     }, // End Idle Reaction
@@ -597,92 +563,89 @@ fn main() {
                             "Game" => {
                                 
                                 //is program running?
+
                                 
                                 game_bool = get_pid(Some(&section.exe_name));
+
                                 match game_bool {
                                     Ok(0) => { //Program not found
-                                        match &section.running.as_str() {
-                                            &"True" => { //Profile is on
-                                                log!(&format!("{} no longer detected!", &section.exe_name));
 
-                                                //change values
-                                                write_key(&"General".to_string(), "running", "True");
-                                                write_key(&sec, "running", "False");
-                                                write_key(&"defaults".to_string(), "gameon", "False");
-                                                write_key(&"defaults".to_string(), "current_priority", "0");
+                                        if section.running.as_str() == "True" { //Profile is on
+                                            log!(&format!("{} no longer detected!", &section.exe_name));
 
-                                                //run extra commands
-                                                ahk_pid = get_ahk_pid(&sec.to_string());
-                                                assert!(ahk_pid.is_ok());
-                                                ahk_pid_u32 = ahk_pid.unwrap();
+                                            //change values
+                                            write_key(&"General".to_string(), "running", "True");
+                                            write_key(&sec, "running", "False");
+                                            write_key(&"defaults".to_string(), "gameon", "False");
+                                            write_key(&"defaults".to_string(), "current_priority", "0");
 
-                                                ahk_close = close_pid(ahk_pid_u32);
-                                                assert!(ahk_close.is_ok());
-                                                log!(&format!("{} is no longer running!", section.name_ofahk));
-                                                
-                                                log!(&format!("{}", reset_running()));   
-                                                
-                                            },
-                                            _ => (),
-                                        }; 
+                                            //run extra commands
+                                            ahk_pid = get_ahk_pid(&sec.to_string());
+                                            assert!(ahk_pid.is_ok());
+                                            ahk_pid_u32 = ahk_pid.unwrap();
+
+                                            ahk_close = close_pid(ahk_pid_u32);
+                                            assert!(ahk_close.is_ok());
+                                            log!(&format!("{} is no longer running!", section.name_ofahk));
+                                            
+                                            log!(reset_running());   
+                                            
+                                        } else {
+                                            return;
+                                        }
                                     },
                                     Ok(msg) => { //Program Found
-                                        match &section.running.as_str() {
-                                            &"False" => { // Profile Off
-                                                log!(&format!("{} detected!", &section.exe_name));
+                                        if section.running.as_str() == "False" { // Profile Off
+                                            log!(&format!("{} detected!", &section.exe_name));
 
-                                                //change values
-                                                write_key(&sec, "running", "True");
-                                                write_key(&sec, "running_pid", &msg.to_string());
-                                                write_key(&"General".to_string(), "running", "False");
-                                                write_key(&"defaults".to_string(), "gameon", "True");
-                                                write_key(&"defaults".to_string(), "current_priority", &section.priority);
+                                            //change values
+                                            write_key(&sec, "running", "True");
+                                            write_key(&sec, "running_pid", &msg.to_string());
+                                            write_key(&"General".to_string(), "running", "False");
+                                            write_key(&"defaults".to_string(), "gameon", "True");
+                                            write_key(&"defaults".to_string(), "current_priority", &section.priority);
 
-                                                //change profiles
-                                                log!(change_signal_rgb(&section.signal_rgbprofile));
-                                                log!(change_open_rgb(&section.open_rgbprofile).unwrap());
-                                                
-                                                match &section.voice_attack_profile.as_str() {
-                                                    &"" => log!("No VoiceAttack profile found."),
-                                                    _ => log!(&change_voice_attack(&section.voice_attack_profile))
-                                                };
+                                            //change profiles
+                                            log!(change_signal_rgb(&section.signal_rgbprofile));
+                                            log!(change_open_rgb(&section.open_rgbprofile).unwrap());
+                                            
+                                            match &section.voice_attack_profile.as_str() {
+                                                &"" => log!("No VoiceAttack profile found."),
+                                                _ => log!(&change_voice_attack(&section.voice_attack_profile))
+                                            };
 
-                                                //run extra commands
-                                                ahk_run = run_cmd(&section.path_toahk);
-                                                assert!(ahk_run.is_ok());
-                                                log!(&format!("{} is running!", &section.name_ofahk));
-                                                match &section.other_commands.as_str() {
-                                                    &"" => (),
-                                                    s => {
-                                                        cmds = s.split(" && ");
-                                                        for c in cmds {
-                                                            let _f = match run_cmd(&c.to_string()) {
-                                                                Ok(_) => log!(format!("Running {}", &c)),
-                                                                Err(e) => log!(format!("Could not run {}: {}", &c, &e), "e"),
-                                                            };
-                                                        }
+                                            //run extra commands
+                                            ahk_run = run_cmd(&section.path_toahk);
+                                            assert!(ahk_run.is_ok());
+                                            log!(&format!("{} is running!", &section.name_ofahk));
+                                            match &section.other_commands.as_str() {
+                                                &"" => (),
+                                                s => {
+                                                    cmds = s.split(" && ");
+                                                    for c in cmds {
+                                                        let _f = match run_cmd(&c.to_string()) {
+                                                            Ok(_) => log!(format!("Running {}", &c)),
+                                                            Err(e) => log!(format!("Could not run {}: {}", &c, &e), "e"),
+                                                        };
                                                     }
                                                 }
-                                                
-                                                
-                                            },
-                                            _ => ()
-                                        };
+                                            }
+                                        } else {
+                                            return;
+                                        }
                                     },
-                                    _ => return
+                                    _ => ()
                                 };
 
                             },
                             "Window" => {
                                 // is a game running?
-                                match &game_on.as_str() {
-                                    &"True" => return,
-                                    _ => ()
+                                if game_on.as_str() == "True" {
+                                    return
                                 };
 
-                                match &get_value("Idle".to_string(), "running".to_owned()).as_str() {
-                                    &"True" => return,
-                                    _ => ()
+                                if get_value("Idle".to_string(), "running".to_owned()).as_str() == "True" {
+                                    return;
                                 }
 
                                 win_flag = &window_flag;
@@ -691,7 +654,7 @@ fn main() {
                                 active_pid = get_active_window().unwrap().process_id;
                                 active_win = name_by_pid(Pid::from(active_pid as usize)).unwrap();
 
-                                if &active_win == &section.exe_name{ // ** WINDOW IS ACTIVE **
+                                if active_win == section.exe_name{ // ** WINDOW IS ACTIVE **
                                     match &section.running.as_str() {
                                         &"False" => { //Profile Off
                                             log!(&format!("{} detected!", &section.exe_name));
@@ -732,8 +695,7 @@ fn main() {
                                             
                                         },
                                         _ => {
-                                            if &win_flag == &&sec {
-                                                return;
+                                            if win_flag == &sec {
                                             } else {
                                                 write_key(&"defaults".to_string(), "window_flag", &sec);
                                                 write_key(&"General".to_string(), "running", "False");
@@ -753,7 +715,7 @@ fn main() {
 
                                             //change values
                                             write_key(&sec, "running", "False");
-                                            if &win_flag == &&sec {
+                                            if win_flag == &sec {
                                                 write_key(&"defaults".to_string(), "window_flag", "General");
                                                 write_key(&"General".to_string(), "running", "True");
                                                 write_key(&"defaults".to_string(), "current_priority", "0");
@@ -771,21 +733,18 @@ fn main() {
 
                                         },
                                         _ => {
-                                            if &win_flag == &&sec {
-                                                if get_value("General".to_string(), "running".to_string()) == "True" {
-                                                    if &section.running_pid == "0" {
+                                            if win_flag == &sec 
+                                                && get_value("General".to_string(), "running".to_string()) == "True" 
+                                                && &section.running_pid == "0" {
                                                         write_key(&"defaults".to_string(), "window_flag", "General");
                                                         write_key(&"General".to_string(), "running_pid", "1");
                                                         write_key(&"defaults".to_string(), "current_priority", "0");
-                                                    };
-                                                }
-                                                                                            
-                                            }
+                                            };
                                         }
                                     };
                                 }
                             }
-                            _ => return
+                            _ => ()
                         };
                     } //End Game or Window Reaction
                     
@@ -796,6 +755,7 @@ fn main() {
             sleep(150);
             check.join().unwrap();
         }; // End of section "For" loop
+
         if get_value("General".to_string(), "running".to_string()) == "True" {
             let section = get_section(&"General".to_string());
             if &section.running_pid == "0" {

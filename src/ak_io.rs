@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Fri, 16 Dec 2022 @ 20:53:54                          #
+// Last Modified: Sat, 17 Dec 2022 @ 8:19:24                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -30,37 +30,38 @@ pub mod read {
         let s = System::new_all();
         if let Some(process) = s.process(pid){
             return Ok(process.name().to_owned());
+        } else {
+            return Err("None".to_string());
         }
-
-        return Err("None".to_string());
     }
 
     pub fn get_pid(pname: Option<&str>) -> Result<u32, &str>{
-        match pname {
-            Some(i) => {
-                
-                let s = System::new_all();
-                let procs = s.processes_by_exact_name(i);
-                
-                match Some(procs) {
-                    Some(p) => {
-                        
-                        for process in p {
-                            
-                            let ox = process.parent().unwrap().to_string();
-                            return Ok(ox.parse::<u32>().unwrap());
-                        };
-     
-                    },
-                    None => {
-                        return Err(&"No Match Found")
-                    }
-                };
-                
-            },
-            None => return Err(&"No Match Found")
-        }
-        return Ok(0)
+        let mut pids = Vec::new();
+        if pname.is_none() {
+            return Err(&"No Match Found");
+        };
+
+        let i = pname.unwrap();
+
+        let s = System::new_all();
+        let procs = s.processes_by_exact_name(i);
+
+        for process in procs {
+            let ox = process.parent().unwrap().to_string();
+            if ox == "0" {
+                continue;
+            } else {
+                pids.push(ox.parse::<u32>().unwrap());
+            }
+        };
+
+        let r = match pids.is_empty() {
+            true => Ok(0),
+            false => Ok(pids.last().unwrap().to_owned()),
+        };
+
+        return r;
+
     }
 
     pub struct Instance {

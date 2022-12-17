@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 11 Dec 2022 @ 13:15:39                          #
+// Last Modified: Fri, 16 Dec 2022 @ 22:28:49                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -35,12 +35,9 @@ pub fn close_all_ahk() -> Result<(), String> {
             &"defaults" => (),
             _ => {
                 let ahk_pid = get_ahk_pid(&sec);
-                match ahk_pid {
-                    Ok(o) => {
-                        let close_ahk = close_pid(o);
-                        assert!(close_ahk.is_ok());
-                    },
-                    Err(_) => ()
+                if let Ok(o) = ahk_pid {
+                    let close_ahk = close_pid(o);
+                    assert!(close_ahk.is_ok());
                 }
                 
             }
@@ -52,28 +49,24 @@ pub fn close_all_ahk() -> Result<(), String> {
 
 pub fn close_pid(pid: u32) -> Result<std::process::Child, std::io::Error>{
     let kill_cmd = format!("TASKKILL /PID {}", &pid);
-    let output = Command::new("cmd.exe")
+    return Command::new("cmd.exe")
     .creation_flags(CREATE_NO_WINDOW)
     .arg("/c")
     .arg(&kill_cmd)
     .spawn();
-
-    return output
 }
 
 pub fn run_cmd(cmd: &String) -> Result<std::process::Child, std::io::Error>{
-    let output = Command::new("cmd.exe")
+    return Command::new("cmd.exe")
         .creation_flags(CREATE_NO_WINDOW)
         .arg("/c")
-        .arg(&cmd)
+        .arg(cmd)
         .spawn();
-    
-    return output
 }
 
 pub fn get_ahk_pid(sec: &String) -> Result<u32, String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let path = Path::new("Software").join("GameMon").join(&sec);
+    let path = Path::new("Software").join("GameMon").join(sec);
     let game_mon = hklm.open_subkey(&path).unwrap();
     let ahk: String = game_mon.get_value("path_toahk").unwrap();
 
@@ -85,9 +78,10 @@ pub fn get_ahk_pid(sec: &String) -> Result<u32, String> {
         if cmd_line.contains(&ahk) {
             return Ok(p.pid().to_string().parse::<u32>().unwrap());
         }
-    }
+    };
     
     return Err("NONE".to_string())
+    
 }
 
 // pub fn change_rgb(section: &str) {
@@ -148,7 +142,7 @@ pub fn change_signal_rgb(profile: &String) -> String{
     let sp = &profile;
     let mut rgb_profile = url_encode(sp.to_string());
 
-    if rgb_profile.contains("?"){
+    if rgb_profile.contains('?'){
         rgb_profile.push_str("^&-silentlaunch-");
     } else {
         rgb_profile.push_str("?-silentlaunch-");
@@ -157,12 +151,11 @@ pub fn change_signal_rgb(profile: &String) -> String{
     let command_var = format!("start signalrgb://effect/apply/{}", &rgb_profile);
   
     let output = run_cmd(&command_var);
-    let return_var: String = match output {
-        Err(e) => format!("Could not execute SignalRGB Command: {}: {:?}", &command_var, e),
-        Ok(_) => format!("Changed SignalRGB to {}", &sp)
-    };
     sleep(250);
-    return return_var;
+    return match output {
+        Err(e) => format!("Could not execute SignalRGB Command: {}: {:?}", &command_var, e),
+        Ok(_) => format!("Changed SignalRGB to {sp}")
+    };
 }
 
 pub fn change_open_rgb(profile: &String) -> Result<String, String> {
@@ -184,8 +177,8 @@ pub fn change_open_rgb(profile: &String) -> Result<String, String> {
 }
 
 pub fn change_voice_attack(profile: &String) -> String {
-    let vac = format!("{}", get_value("defaults".to_string(), "voice_attack_path".to_string()));
-    let pro = format!("{}", &profile);
+    let vac = get_value("defaults".to_string(), "voice_attack_path".to_string());
+    let pro = (&profile).to_string();
     let cmd = format!("{} -profile {}", &vac, &pro);
 
     let output = Command::new(&vac)

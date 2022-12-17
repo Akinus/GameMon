@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:54:42                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 14:47:17                          #
+// Last Modified: Sat, 17 Dec 2022 @ 7:12:15                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -37,14 +37,18 @@ pub mod windows {
     pub fn msg_box(title: String, message: String, exit_wait_time_in_ms: u64) -> Result<DLGID, HRESULT> {
         let msg = message.clone();
         let til = title.clone();
-        let y = std::thread::spawn(move ||{
-            let _rr = msgbox::create(&til, &msg, msgbox::IconType::Info);
-    
-        });
         
-        let f = match exit_wait_time_in_ms {
-            0 => Ok(DLGID::OK),
+        
+        return match exit_wait_time_in_ms {
+            0 => {
+                let _rr = msgbox::create(&til, &msg, msgbox::IconType::Info);
+                Ok(DLGID::OK)
+            },
             _ => {
+                std::thread::spawn(move ||{
+                    let _rr = msgbox::create(&til, &msg, msgbox::IconType::Info);
+            
+                });
                 sleep(exit_wait_time_in_ms);
     
                 // let hwnd1 = get_by_title("Monitor Settings", None)
@@ -65,19 +69,14 @@ pub mod windows {
                         Ok(DLGID::OK)
                     }, 
                     Err(e) => {
-                        log!(format!("Could not close MsgBox!\nTitle: {}\nText: {}\nHandle: {:?}\nError: {}", title, message, p, e), "e" );
+                        log!(format!("Could not close MsgBox!\nTitle: {title}\nText: {message}\nHandle: {p:?}\nError: {e}"), "e" );
                         Err(HRESULT::E_INVALIDARG)
                     }
                 };
     
                 r
             }
-        };
-    
-        let _x = y.join();
-        
-        return f;
-        
+        };        
     }
 
     #[derive(Clone)]
@@ -964,7 +963,7 @@ pub mod windows {
                         }
                     };
 
-                    item_vec.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+                    item_vec.sort_by_key(|a| a.to_lowercase());
                     for i in item_vec{
                         self2.main_list.items().add(&[i]);
                     }
@@ -1028,9 +1027,9 @@ pub mod windows {
                 
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     
-                    match &sec.as_str() {
-                        &"defaults" => (),
-                        &"Idle" => {
+                    match sec.as_str() {
+                        "defaults" => (),
+                        "Idle" => {
                             let section = get_section(&sec);
                             self2.label_exe.set_text("Idle Time in Seconds");
                             self2.edit_exe.set_text(&ss_get("ScreenSaveTimeOut"));
@@ -1166,16 +1165,13 @@ pub mod windows {
                         let gow = game_or_win.hwnd().GetWindowText()?;
                         
                         write_key(&sec, "game_or_win", &gow);
-                        match &sec.as_str() {
-                            &"Idle" => {
-                                let new_gow = match gow.as_str() {
-                                    "Yes" => "1",
-                                    _ => "0"
-                                };
-                                ss_set("ScreenSaveActive", new_gow);
-                            },
-                            _ => ()
-                        }
+                        if sec.as_str() == "Idle" {
+                            let new_gow = match gow.as_str() {
+                                "Yes" => "1",
+                                _ => "0"
+                            };
+                            ss_set("ScreenSaveActive", new_gow);
+                        };
 
                         match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
                             Ok(o) => {
@@ -1231,7 +1227,7 @@ pub mod windows {
                         s => {
                             let cmds = s.split(" && ");
                             for c in cmds {
-                                final_string.push_str(&c);
+                                final_string.push_str(c);
                             }
                             
                             final_string.push_str(" && ");
@@ -1264,12 +1260,12 @@ pub mod windows {
                     let section = get_section(&sec);
                     let cmd = &self2.cmd_list.items().iter_selected().last().unwrap().1;
                     let mut needle = " && ".to_owned();
-                    needle.push_str(&cmd);
+                    needle.push_str(cmd);
                     
                     let haystack = &section.other_commands;
 
                     if haystack.contains(&needle) {
-                        let final_string = str::replace(&haystack, &needle, "");
+                        let final_string = str::replace(haystack, &needle, "");
                         
                         write_key(&sec, "other_commands", &final_string);
                         self2.edit_cmd_add.set_text("");
@@ -1285,7 +1281,7 @@ pub mod windows {
                             }
                         }
                     } else if haystack.contains(&cmd.to_string()) {
-                        let final_string = str::replace(&haystack, &cmd.to_string(), "");
+                        let final_string = str::replace(haystack, &cmd.to_string(), "");
                         
                         write_key(&sec, "other_commands", &final_string);
                         self2.edit_cmd_add.set_text("");
@@ -1303,7 +1299,7 @@ pub mod windows {
                     } else {
                         let final_string = haystack;
                         
-                        write_key(&sec, "other_commands", &final_string);
+                        write_key(&sec, "other_commands", final_string);
                         self2.edit_cmd_add.set_text("");
                         let section = get_section(&sec);
                         self2.cmd_list.items().delete_all();
@@ -1350,7 +1346,7 @@ pub mod windows {
                                 }
                             };
             
-                            item_vec.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+                            item_vec.sort_by_key(|a| a.to_lowercase());
                             for i in item_vec{
                                 self2.main_list.items().add(&[i]);
                             }
@@ -1366,7 +1362,7 @@ pub mod windows {
                 let self2 = self.clone();
                 move || {
                     let sec = &self2.main_list.items().iter_selected().last().unwrap().1;
-                    delete_section(&sec);
+                    delete_section(sec);
                     log!(format!("Deleted monitor {}...", &sec));
 
                     self2.main_list.items().delete_all();
@@ -1383,7 +1379,7 @@ pub mod windows {
                         }
                     };
 
-                    item_vec.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+                    item_vec.sort_by_key(|a| a.to_lowercase());
                     for i in item_vec{
                         self2.main_list.items().add(&[i]);
                     }
@@ -1427,21 +1423,18 @@ pub mod windows {
                     
                     write_key(&sec, "exe_name", &self2.edit_exe.text());
 
-                    match &sec.as_str() {
-                        &"Idle" => {
-                            ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
-                        },
-                        _ => ()
-                    }
+                    if sec.as_str() == "Idle"{
+                        ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
+                    };
 
                     write_key(&sec, "game_window_name", &self2.edit_win_name.text());
 
-                    if &self2.edit_ahk_path.text() == "" {
+                    if self2.edit_ahk_path.text().is_empty() {
                         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                         let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
                         let mut script_dir: String = g_key.get_value("InstallDir").unwrap();
                         let script_dirname = "\\scripts";
-                        script_dir.push_str(&script_dirname);
+                        script_dir.push_str(script_dirname);
                         script_dir.push_str(&format!("\\{}.ahk", &sec));
 
                         File::create(&script_dir).unwrap();
@@ -1450,7 +1443,7 @@ pub mod windows {
                             .append(true)
                             .open(&script_dir)
                             .unwrap();
-                        write!(lfile, "{}", format!("#Persistent\n#SingleInstance, Force\n#NoTrayIcon")).unwrap();
+                        write!(lfile, "#Persistent\n#SingleInstance, Force\n#NoTrayIcon").unwrap();
 
                         self2.edit_ahk_path.set_text(&script_dir);
                     }
@@ -1463,16 +1456,13 @@ pub mod windows {
                     if let Some(game_or_win) = self2.radio_game_win.checked() {
                         let gow = game_or_win.hwnd().GetWindowText()?;
                         write_key(&sec, "game-or-win", &gow);
-                        match &sec.as_str() {
-                            &"Idle" => {
-                                let new_gow = match gow.as_str() {
-                                    "Yes" => "1",
-                                    _ => "0"
-                                };
-                                ss_set("ScreenSaveActive", new_gow);
-                            },
-                            _ => ()
-                        }
+                        if sec.as_str() == "Idle" {
+                            let new_gow = match gow.as_str() {
+                                "Yes" => "1",
+                                _ => "0"
+                            };
+                            ss_set("ScreenSaveActive", new_gow);
+                        };
                     }
                     if let Some(priority) = self2.radio_priority.checked() {
                         let gow = priority.hwnd().GetWindowText()?;
@@ -1499,21 +1489,18 @@ pub mod windows {
                     
                     write_key(&sec, "exe_name", &self2.edit_exe.text());
 
-                    match &sec.as_str() {
-                        &"Idle" => {
-                            ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
-                        },
-                        _ => ()
-                    }
+                    if sec.as_str() == "Idle" {
+                        ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
+                    };
 
                     write_key(&sec, "game_window_name", &self2.edit_win_name.text());
 
-                    if &self2.edit_ahk_path.text() == "" {
+                    if self2.edit_ahk_path.text().is_empty() {
                         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                         let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
                         let mut script_dir: String = g_key.get_value("InstallDir").unwrap();
                         let script_dirname = "\\scripts";
-                        script_dir.push_str(&script_dirname);
+                        script_dir.push_str(script_dirname);
                         script_dir.push_str(&format!("\\{}.ahk", &sec));
 
                         File::create(&script_dir).unwrap();
@@ -1522,7 +1509,7 @@ pub mod windows {
                             .append(true)
                             .open(&script_dir)
                             .unwrap();
-                        write!(lfile, "{}", format!("#Persistent\n#SingleInstance, Force\n#NoTrayIcon")).unwrap();
+                        write!(lfile, "#Persistent\n#SingleInstance, Force\n#NoTrayIcon").unwrap();
 
                         self2.edit_ahk_path.set_text(&script_dir);
                     }
@@ -1535,16 +1522,13 @@ pub mod windows {
                     if let Some(game_or_win) = self2.radio_game_win.checked() {
                         let gow = game_or_win.hwnd().GetWindowText()?;
                         write_key(&sec, "game-or-win", &gow);
-                        match &sec.as_str() {
-                            &"Idle" => {
-                                let new_gow = match gow.as_str() {
-                                    "Yes" => "1",
-                                    _ => "0"
-                                };
-                                ss_set("ScreenSaveActive", new_gow);
-                            },
-                            _ => ()
-                        }
+                        if sec.as_str() == "Idle" {
+                            let new_gow = match gow.as_str() {
+                                "Yes" => "1",
+                                _ => "0"
+                            };
+                            ss_set("ScreenSaveActive", new_gow);
+                        };
                     }
                     if let Some(priority) = self2.radio_priority.checked() {
                         let gow = priority.hwnd().GetWindowText()?;
@@ -1588,14 +1572,14 @@ pub mod windows {
     pub fn defaults_gui(){
         let my = DefaultsWindow::new(); // instantiate our defaults window
         if let Err(e) = my.wnd.run_main(None) { // ... and run it
-            eprintln!("{}", e);
+            eprintln!("{e}");
         }
     }
     
     pub fn main_gui(){
         let my = MyWindow::new(); // instantiate our main window
         if let Err(e) = my.wnd.run_main(None) { // ... and run it
-            eprintln!("{}", e);
+            eprintln!("{e}");
         }
     }
 }

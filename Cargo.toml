@@ -6,15 +6,18 @@ build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+lto = true
+codegen-units = 1
+
 [dependencies]
 windows-win = "2.4.1"
-sysinfo = "0.26.2"
+sysinfo = "0.27.0"
 native-dialog = "0.6.3"
 active-win-pos-rs = "0.7.0"
 chrono = "0.4.22"
 tray-item = "0.7.1"
 winreg = "0.10"
-eframe = "0.19.0"
 winsafe = { version = "0.0.11", features = ["gui", "user"] }
 quoted-string = "0.6.1"
 ureq = "2.5.0"

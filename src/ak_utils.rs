@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 10 Dec 2022 @ 14:13:34                          #
+// Last Modified: Fri, 16 Dec 2022 @ 21:21:07                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -36,14 +36,12 @@ pub fn dark_hours(time_range: &String) -> bool {
         } else {
             return true
         }
-    } else {
-        if (time_of_day > start_time) && (time_of_day < end_time) {
+    } else if (time_of_day > start_time) && (time_of_day < end_time) {
             return true
         } else {
             return false
         }
     }
-}
 
 pub fn url_encode(data: String) -> String{
     let data = str::replace(&data, "\n", "%0A");
