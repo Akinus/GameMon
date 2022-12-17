@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 11 Dec 2022 @ 12:58:43                          #
+// Last Modified: Fri, 16 Dec 2022 @ 20:47:22                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -198,10 +198,14 @@ fn main() {
         path = Path::new("Software").join("GameMon");
         
         for sec in hklm.open_subkey(path).unwrap().enum_keys().map(|x| x.unwrap()){
+            let section = match &sec.as_str() {
+                &"defaults" => continue,
+                &"General" => continue,
+                _ => get_section(&sec),
+            };
 
             let check = std::thread::spawn(move || {
             
-                let section;
                 // let defaults = get_defaults();
                 let time_range;
                 let ss;
@@ -228,12 +232,6 @@ fn main() {
                 let path = Path::new("Software").join("GameMon");
                 let game_mon = hklm.open_subkey(path).unwrap();
 
-                section = match &sec.as_str() {
-                    &"defaults" => return,
-                    &"General" => return,
-                    _ => get_section(&sec),
-                };
-                
                 match &current_priority.parse::<u64>().unwrap().cmp(&section.priority.parse::<u64>().unwrap()) {
                     Ordering::Greater => return, // DO NOTHING...section is lower priority than current priority
                     _ => ()
@@ -587,7 +585,7 @@ fn main() {
                                         
                                         log!(&format!("{}", reset_running()));
                                     },
-                                    _ => ()
+                                    _ => return
                                 }
                             }
                         };
@@ -671,9 +669,7 @@ fn main() {
                                             _ => ()
                                         };
                                     },
-                                    _ => {
-                                        
-                                    }
+                                    _ => return
                                 };
 
                             },
@@ -789,7 +785,7 @@ fn main() {
                                     };
                                 }
                             }
-                            _ => ()
+                            _ => return
                         };
                     } //End Game or Window Reaction
                     
@@ -817,7 +813,7 @@ fn main() {
                 write_key(&"defaults".to_string(), "current_priority", "0");
         } else {
             match get_value("General".to_string(), "running_pid".to_string()).as_str() {
-                "0" => (),
+                "0" => continue,
                 _ => {
                     write_key(&"General".to_string(), "running_pid", "0");
                 }

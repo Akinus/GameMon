@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 11 Dec 2022 @ 13:03:49                          #
+// Last Modified: Fri, 16 Dec 2022 @ 20:53:54                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -230,6 +230,7 @@ pub mod read {
         gamemon.get_value(key).unwrap()
     }
 
+    
     pub fn reg_check(){
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
         let mut path = Path::new("Software").join("GameMon");
