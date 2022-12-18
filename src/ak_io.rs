@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 17 Dec 2022 @ 8:19:24                           #
+// Last Modified: Sun, 18 Dec 2022 @ 15:46:17                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -14,26 +14,17 @@
 
 //   Import Data ####
 pub mod read {
-    use std::path::Path;
+    use std::{path::Path, cmp::Ordering};
     use sysinfo::{System, SystemExt, Pid, ProcessExt};
+    use winapi::{um::winuser::{LASTINPUTINFO, PLASTINPUTINFO, GetLastInputInfo}};
     use winreg::{RegKey, enums::{HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER, RegDisposition}};
+    use active_win_pos_rs::get_active_window;
 
     use crate::{ak_utils::macros::
     {
         d_quote,
         log
     }, ak_io::write::{write_key, reg_section_new, reg_write_value}};
-
-    
-
-    pub fn name_by_pid(pid: Pid) -> Result<String, String>{
-        let s = System::new_all();
-        if let Some(process) = s.process(pid){
-            return Ok(process.name().to_owned());
-        } else {
-            return Err("None".to_string());
-        }
-    }
 
     pub fn get_pid(pname: Option<&str>) -> Result<u32, &str>{
         let mut pids = Vec::new();
@@ -62,6 +53,54 @@ pub mod read {
 
         return r;
 
+    }
+
+    pub fn process_exists(pname: Option<&str>) -> bool {
+        let mut pids = Vec::new();
+        if pname.is_none() {
+            return false;
+        };
+
+        let i = pname.unwrap();
+
+        let s = System::new_all();
+        let procs = s.processes_by_exact_name(i);
+
+        for process in procs {
+            let ox = process.parent().unwrap().to_string();
+            if ox == "0" {
+                continue;
+            } else {
+                pids.push(ox.parse::<u32>().unwrap());
+            }
+        };
+
+        let r = match pids.is_empty() {
+            true => false,
+            false => true,
+        };
+
+        return r
+    }
+
+    pub fn window_is_active(process_name: Option<&str>) -> bool {
+        let active_pid = get_active_window().unwrap().process_id;
+
+        let s = System::new_all();
+        let process = s.process(Pid::from(active_pid as usize)).unwrap().name();
+           
+        if process == process_name.unwrap() {
+            return true;
+        } else {
+            return false;
+        } 
+    }
+
+    pub fn active_window_name() -> String {
+        let active_pid = get_active_window().unwrap().process_id;
+
+        let s = System::new_all();
+        return s.process(Pid::from(active_pid as usize)).unwrap().name().to_string();
     }
 
     pub struct Instance {
@@ -204,7 +243,7 @@ pub mod read {
                         "game_or_win" => section.game_or_win = d_quote!(&value.to_string()),
                         "running" => section.running = d_quote!(&value.to_string()),
                         "running_pid" => section.running_pid = d_quote!(&value.to_string()),
-                        "other_commands" => section.other_commands = d_quote!(&value.to_string()),
+                        "other_commands" => section.other_commands = sec.get_raw_value("other_commands").unwrap().to_string(),
                         "priority" => section.priority = d_quote!(&value.to_string()),
                         _ => ()
                     }
@@ -231,7 +270,13 @@ pub mod read {
         gamemon.get_value(key).unwrap()
     }
 
-    
+    pub fn gamemon_value(key: String) -> String{
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let path = Path::new("Software").join("GameMon");
+        let gamemon = hklm.open_subkey(&path).unwrap();
+        gamemon.get_value(key).unwrap()
+    }
+
     pub fn reg_check(){
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
         let mut path = Path::new("Software").join("GameMon");
@@ -255,6 +300,14 @@ pub mod read {
                     },
                     Err(_) => {
                         log!(&format!("Could not write value {:?} to {}\\display", &path, &ini_file), "e");
+                    },
+                };
+                match reg_write_value(&path, "current_profile".to_string(), (&"General").to_string()) {
+                    Ok(_) => {
+                        log!(&format!("Wrote value \"General\" to {}\\current_profile", &ini_file));
+                    },
+                    Err(_) => {
+                        log!(&format!("Could not write value \"General\" to {}\\current_profile", &ini_file), "e");
                     },
                 };
     
@@ -336,6 +389,32 @@ pub mod read {
         
     }
 
+    pub fn user_idle(wait_time: u64) -> bool {
+        let now = unsafe { winapi::um::sysinfoapi::GetTickCount() };
+        let mut last_input_info = LASTINPUTINFO {
+            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dwTime: 0
+        };
+    
+        let p_last_input_info: PLASTINPUTINFO = &mut last_input_info as *mut LASTINPUTINFO;
+    
+        let ok = unsafe { GetLastInputInfo(p_last_input_info) } != 0;
+    
+        let idle_seconds = match ok {
+            true => {
+                let millis = now - last_input_info.dwTime;
+                Ok(std::time::Duration::from_millis(millis as u64))
+            },
+            false => Err("GetLastInputInfo failed".to_string())
+        }.unwrap().as_secs();
+
+        if idle_seconds.cmp(&(&wait_time)) == Ordering::Greater {
+            return true
+        } else {
+            return false
+        }
+    }
+
 }
 
 pub mod write {
@@ -387,6 +466,9 @@ pub mod write {
         write_key(&"defaults".to_string(), "gameon", "False");
         write_key(&"General".to_string(), "running", "True");
         write_key(&"General".to_string(), "running_pid", "0");
+        let _v = reg_write_value(&Path::new("Software").join("GameMon")
+            , "current_profile".to_string()
+            , "General".to_string());
         return "Running values reset.".to_string();
     }
 
@@ -448,9 +530,9 @@ pub mod write {
 
 pub mod logging {
     use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
-    use crate::ak_utils::macros::{
+    use crate::{ak_utils::macros::{
         log
-    };
+    }, ak_io::read::get_value};
 
     
     pub fn initialize_log(){
@@ -527,6 +609,14 @@ pub mod logging {
         };
     
         log!("GameMon Started...", "w");
+
+        let last_error = std::io::Error::last_os_error().to_string();
+    
+        if last_error.contains("GameMon"){
+            log!(format!("Last shutdown reason: CRASH"), "e");
+        } else {
+            log!(format!("Last shutdown reason: {}", get_value("defaults".to_string(), "exit_reason".to_string())), "w");
+        }
     
     }
 }

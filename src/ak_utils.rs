@@ -5,22 +5,34 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Fri, 16 Dec 2022 @ 21:21:07                          #
+// Last Modified: Sun, 18 Dec 2022 @ 6:55:35                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
 // ----------	---	-------------------------------------------------- #
 // #####################################################################
 
-use chrono::{Local, NaiveTime};
+use std::cmp::Ordering;
 
-use crate::ak_utils::macros::exit_app;
+use chrono::{Local, NaiveTime};
+use sysinfo::{System, SystemExt, ProcessExt};
+
+use crate::ak_utils::macros::{exit_app, log};
 use crate::ak_run::close_all_ahk;
+use crate::ak_io::write::{reset_running, write_key};
 
 //   Import Data ####
 pub fn sleep(milliseconds: u64){
     let mills = std::time::Duration::from_millis(milliseconds);
     std::thread::sleep(mills);
+}
+
+pub fn memory_check(){
+    let mem = System::new_all().processes_by_exact_name("GameMon.exe").last().unwrap().memory();
+
+    if mem.cmp(&"1073741824".parse::<u64>().unwrap()) == Ordering::Greater {
+        exit_app!(0, "Memory allocation too high");
+    };
 }
 
 pub fn dark_hours(time_range: &String) -> bool {

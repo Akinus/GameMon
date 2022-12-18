@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:54:42                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 17 Dec 2022 @ 7:12:15                           #
+// Last Modified: Sun, 18 Dec 2022 @ 14:23:23                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -32,34 +32,39 @@ pub mod windows {
     use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
     use winsafe::{co::{DLGID, HRESULT, COLOR, WS, SS, WS_EX}, gui, WString, SIZE, POINT, prelude::{GuiWindowText, GuiNativeControlEvents, GuiWindow, GuiParent, GuiEvents, user_Hwnd, GuiChildFocus}};
     
-    use crate::{ak_utils::{sleep, macros::log}, ak_io::{write::{write_key, ss_set, reset_running, write_section, delete_section}, read::{get_section, ss_get, get_defaults}}};
+    use crate::{ak_utils::{sleep, macros::{log, d_quote}}, ak_io::{write::{write_key, ss_set, reset_running, write_section, delete_section}, read::{get_section, ss_get, get_defaults}}};
     
-    pub fn msg_box(title: String, message: String, exit_wait_time_in_ms: u64) -> Result<DLGID, HRESULT> {
-        let msg = message.clone();
-        let til = title.clone();
+    pub fn msg_box(title: Option<&str>, message: Option<&str>, exit_wait_time_in_ms: u64) -> Result<DLGID, HRESULT> {
+        let ftitle = match title {
+            Some(t) => t,
+            None => "GameMon"
+        };
         
-        
+        let fmessage = match message {
+            Some(m) => m,
+            None => "Test"
+        };
+
+        let til = String::from(ftitle);
+        let msg = String::from(fmessage);
+
         return match exit_wait_time_in_ms {
             0 => {
-                let _rr = msgbox::create(&til, &msg, msgbox::IconType::Info);
+                let _rr = msgbox::create(&ftitle, &fmessage, msgbox::IconType::Info);
                 Ok(DLGID::OK)
             },
             _ => {
+                
                 std::thread::spawn(move ||{
-                    let _rr = msgbox::create(&til, &msg, msgbox::IconType::Info);
+                    let _rr = msgbox::create(&til,&msg, msgbox::IconType::Info);
             
                 });
                 sleep(exit_wait_time_in_ms);
     
-                // let hwnd1 = get_by_title("Monitor Settings", None)
-                //     .unwrap()
-                //     .last()
-                //     .unwrap()
-                //     .to_owned();
     
                 let hwnd1 = unsafe {GetDesktopWindow()};
     
-                let p = get_by_title(&title, Some(hwnd1)).unwrap().last().unwrap().to_owned();
+                let p = get_by_title(&ftitle, Some(hwnd1)).unwrap().last().unwrap().to_owned();
                 let b = get_by_title("OK", Some(p)).unwrap().last().unwrap().to_owned();
     
                 let s = send_message(b, BM_CLICK , 0, 0, Some(5));
@@ -69,7 +74,7 @@ pub mod windows {
                         Ok(DLGID::OK)
                     }, 
                     Err(e) => {
-                        log!(format!("Could not close MsgBox!\nTitle: {title}\nText: {message}\nHandle: {p:?}\nError: {e}"), "e" );
+                        log!(format!("Could not close MsgBox!\nTitle: {ftitle}\nText: {fmessage}\nHandle: {p:?}\nError: {e}"), "e" );
                         Err(HRESULT::E_INVALIDARG)
                     }
                 };
@@ -457,7 +462,7 @@ pub mod windows {
                     write_key(&"defaults".to_string(), "night_hour_srgb_profile", self2.edit_night_hour_srgb_profile.text().as_str());
                     write_key(&"defaults".to_string(), "orgb_port", self2.edit_orgb_port.text().as_str());
                     write_key(&"defaults".to_string(), "orgb_address", self2.edit_orgb_address.text().as_str());
-                    match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
+                    match msg_box(None, Some("Saving..."), 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &"defaults".to_string(), o));
                         },
@@ -1085,7 +1090,7 @@ pub mod windows {
                                 s => {
                                     let cmds = s.split(" && ");
                                     for c in cmds {
-                                        self2.cmd_list.items().add(&[c]);
+                                        self2.cmd_list.items().add(&[d_quote!(c)]);
                                     }
                                 }
                             }
@@ -1146,7 +1151,7 @@ pub mod windows {
                                 s => {
                                     let cmds = s.split(" && ");
                                     for c in cmds {
-                                        self2.cmd_list.items().add(&[c]);
+                                        self2.cmd_list.items().add(&[d_quote!(c)]);
                                     }
                                 }
                             }
@@ -1173,7 +1178,7 @@ pub mod windows {
                             ss_set("ScreenSaveActive", new_gow);
                         };
 
-                        match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
+                        match msg_box(None, Some("Saving..."), 1000) {
                             Ok(o) => {
                                 log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                             },
@@ -1197,7 +1202,7 @@ pub mod windows {
                         let gow = priority.hwnd().GetWindowText()?;
                         
                         write_key(&sec, "priority", &gow);
-                        match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
+                        match msg_box(None, Some("Saving..."), 1000) {
                             Ok(o) => {
                                 log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                             },
@@ -1469,7 +1474,7 @@ pub mod windows {
                         write_key(&sec, "priority", &gow);
                     }
                     log!(&format!("Saved settings for {}...", &sec));
-                    match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
+                    match msg_box(None, Some("Saving..."), 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                         },
@@ -1535,7 +1540,7 @@ pub mod windows {
                         write_key(&sec, "priority", &gow);
                     }
                     log!(&format!("Saved settings for {}...", &sec));
-                    match msg_box("GameMon - SAVED!".to_string(), "Saved!".to_string(), 1000) {
+                    match msg_box(None, Some("Saving..."), 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                         },
