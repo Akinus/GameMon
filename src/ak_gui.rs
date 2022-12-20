@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:54:42                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 18 Dec 2022 @ 14:23:23                          #
+// Last Modified: Mon, 19 Dec 2022 @ 22:20:16                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -14,7 +14,7 @@
 
 //   Import Data ####
 pub mod windows {
-    use std::{path::Path, fs::{File, OpenOptions}};
+    use std::{path::Path, fs::{File, OpenOptions}, cmp::Ordering};
     use std::io::Write;
 
     use msgbox;
@@ -32,7 +32,7 @@ pub mod windows {
     use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
     use winsafe::{co::{DLGID, HRESULT, COLOR, WS, SS, WS_EX}, gui, WString, SIZE, POINT, prelude::{GuiWindowText, GuiNativeControlEvents, GuiWindow, GuiParent, GuiEvents, user_Hwnd, GuiChildFocus}};
     
-    use crate::{ak_utils::{sleep, macros::{log, d_quote}}, ak_io::{write::{write_key, ss_set, reset_running, write_section, delete_section}, read::{get_section, ss_get, get_defaults}}};
+    use crate::{ak_utils::{sleep, macros::{log}}, ak_io::{write::{write_key, ss_set, reset_running, write_section, delete_section}, read::{get_section, ss_get, get_defaults, get_value}}};
     
     pub fn msg_box(title: Option<&str>, message: Option<&str>, exit_wait_time_in_ms: u64) -> Result<DLGID, HRESULT> {
         let ftitle = match title {
@@ -1058,6 +1058,7 @@ pub mod windows {
                                     self2.radio_game_win[1].select(true);
                                 }
                             };
+                            self2.label_priority.set_text("Priority....");
                             match section.priority.as_str() {
                                 "1" => {
                                     self2.radio_priority[0].select(true);
@@ -1090,7 +1091,7 @@ pub mod windows {
                                 s => {
                                     let cmds = s.split(" && ");
                                     for c in cmds {
-                                        self2.cmd_list.items().add(&[d_quote!(c)]);
+                                        self2.cmd_list.items().add(&[c]);
                                     }
                                 }
                             }
@@ -1119,6 +1120,7 @@ pub mod windows {
                                     self2.radio_game_win[1].select(true);
                                 }
                             };
+                            self2.label_priority.set_text("Priority....");
                             match section.priority.as_str() {
                                 "1" => {
                                     self2.radio_priority[0].select(true);
@@ -1151,7 +1153,7 @@ pub mod windows {
                                 s => {
                                     let cmds = s.split(" && ");
                                     for c in cmds {
-                                        self2.cmd_list.items().add(&[d_quote!(c)]);
+                                        self2.cmd_list.items().add(&[c]);
                                     }
                                 }
                             }
@@ -1221,30 +1223,40 @@ pub mod windows {
                 let self2 = self.clone();
                 move || {
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
-                    let section = get_section(&sec);
                     let mut final_string = "".to_owned();
-                    match &section.other_commands.as_str() {
-                        &"" => {
-                            final_string.push_str(&self2.edit_cmd_add.text());
+                    let reg_cmds = get_value(sec.clone(), "other_commands".to_string());
+                    if reg_cmds.is_empty(){
+                        final_string.push_str(&self2.edit_cmd_add.text());
                             
-                            write_key(&sec, "other_commands", &final_string);
-                        },
-                        s => {
-                            let cmds = s.split(" && ");
-                            for c in cmds {
+                        write_key(&sec, "other_commands", &final_string);
+                    } else {
+                        let co = reg_cmds.split(" && ");
+                        let mut cmd_vec = Vec::new();
+                        for o in co {
+                            cmd_vec.push(o);
+                        };
+                        let len = cmd_vec.len() as u32;
+                        if len.cmp(&(1 as u32)) == Ordering::Greater {
+                            for c in cmd_vec {
                                 final_string.push_str(c);
+                                final_string.push_str(" && ");
                             }
                             
+                            final_string.push_str(&self2.edit_cmd_add.text());
+                            write_key(&sec, "other_commands", &final_string);
+                        } else {
+                            final_string.push_str(&reg_cmds);
                             final_string.push_str(" && ");
                             final_string.push_str(&self2.edit_cmd_add.text());
                             write_key(&sec, "other_commands", &final_string);
                         }
-                    }
-                    
+                        
+                    };
+                   
                     self2.edit_cmd_add.set_text("");
-                    let section = get_section(&sec);
+                    let reg_cmds = get_value(sec.clone(), "other_commands".to_string());
                     self2.cmd_list.items().delete_all();
-                    match &section.other_commands.as_str() {
+                    match &reg_cmds.as_str() {
                         &"" => (),
                         s => {
                             let cmds = s.split(" && ");
@@ -1264,8 +1276,8 @@ pub mod windows {
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     let section = get_section(&sec);
                     let cmd = &self2.cmd_list.items().iter_selected().last().unwrap().1;
-                    let mut needle = " && ".to_owned();
-                    needle.push_str(cmd);
+                    let mut needle = cmd.to_owned();
+                    needle.push_str(" && ");
                     
                     let haystack = &section.other_commands;
 

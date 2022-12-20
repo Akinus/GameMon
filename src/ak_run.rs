@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 18 Dec 2022 @ 17:11:37                          #
+// Last Modified: Tue, 20 Dec 2022 @ 9:19:55                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -17,12 +17,12 @@ use std::{path::Path, process::Command, os::windows::process::CommandExt};
 use mouse_rs::Mouse;
 use sysinfo::{ProcessExt, System, SystemExt};
 use ureq::Error;
-use winapi::um::winbase::CREATE_NO_WINDOW;
+use winapi::{um::{winbase::CREATE_NO_WINDOW, winuser::{GetForegroundWindow, SetForegroundWindow}}};
 
-use windows_win::raw::window::{send_message, get_by_class};
+use windows_win::{raw::window::{send_message, get_by_class}};
 use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
 
-use crate::{ak_utils::{url_encode, macros::{log}}, ak_io::{read::{get_value, ss_get, get_pid}, write::reg_write_value}};
+use crate::{ak_utils::{url_encode, macros::{log}, sleep}, ak_io::{read::{get_value, ss_get, get_pid}, write::{reg_write_value, write_key}}};
 
 //   Import Data ####
 pub fn close_all_ahk() -> Result<(), String> {
@@ -237,28 +237,102 @@ pub fn power_monitors(on_off: bool){
 }
 
 pub fn run_screensaver(){
-    let ss_exe = ss_get("SCRNSAVE.EXE");
+    sleep(5000);
+    let ss_exe = ss_get("SCRNSAVE.EXE").to_owned();
     match get_pid(Some(&ss_exe)) { // Check for Screensaver
         Ok(_) => {
-            let cmd = &format!("TASKKILL /im /f {ss_exe}");
-            let r = run_cmd(cmd);
-            log!(format!("Screensaver Detected...taking ownership of screensaver.\n\n{:?}", &r));
-            let ss = format!("{} /S", ss_get("SCRNSAVE.EXE"));
-            let _z = match run_cmd(&ss) {
-                Ok(_) => String::from("OK"),
-                Err(e) => log!(format!("Failed to run Screensaver!! Command: {} || Error: {}", &ss, &e), "e")
+            
+            let _kill = match Command::new("cmd.exe")
+            .creation_flags(CREATE_NO_WINDOW)
+            .arg("/c")
+            .arg("TASKKILL")
+            .arg("/im")
+            .arg("/f")
+            .arg(ss_get("SCRNSAVE.EXE"))
+            .spawn() {
+                Ok(r) => log!(format!("Screensaver Detected...taking ownership of screensaver.\n\n{:?}", &r)),
+                Err(e) => log!(format!("Failed to kill Screensaver!! Error: {}", &e), "e")
+            };
+
+            let _z = match Command::new("cmd.exe")
+            .creation_flags(CREATE_NO_WINDOW)
+            .arg("/c")
+            .arg(ss_get("SCRNSAVE.EXE"))
+            .arg("/S")
+            .spawn() {
+                Ok(r) => log!(format!("Initiating Screensaver...\n\n{r:?}")),
+                Err(e) => log!(format!("Failed to run Screensaver!! Error: {}", &e), "e")
             };
 
         },
-        _ => (),
+        _ => {
+            let _z = match Command::new("cmd.exe")
+            .creation_flags(CREATE_NO_WINDOW)
+            .arg("/c")
+            .arg(ss_get("SCRNSAVE.EXE"))
+            .arg("/S")
+            .spawn() {
+                Ok(r) => log!(format!("Initiating Screensaver...\n\n{r:?}")),
+                Err(e) => log!(format!("Failed to run Screensaver!! Error: {}", &e), "e")
+            };
+        }
     };
+
+    let take_two = std::thread::spawn(move ||{
+        sleep(5000);
+        match get_pid(Some(&ss_exe)) { // Check for Screensaver
+            Ok(_) => return,
+            _ => {
+                let _z = match Command::new("cmd.exe")
+                .creation_flags(CREATE_NO_WINDOW)
+                .arg("/c")
+                .arg(ss_get("SCRNSAVE.EXE"))
+                .arg("/S")
+                .spawn() {
+                    Ok(r) => log!(format!("Initiating Screensaver...\n\n{r:?}")),
+                    Err(e) => log!(format!("Failed to run Screensaver!! Error: {}", &e), "e")
+                };
+            }
+        };
+    });
+
+    take_two.join().unwrap();
+
+
 }
 
 pub fn run_other_commands(other_commands: &String){
-    for c in other_commands.split(" && ") {
-        let _f = match run_cmd(&c.to_string()) {
-            Ok(_) => log!(format!("Running {}", &c)),
-            Err(e) => log!(format!("Could not run {}: {}", &c, &e), "e"),
-        };
+    if other_commands.is_empty() {
+        return;
     }
+
+    let h = unsafe { GetForegroundWindow() };
+
+    
+    let mut collection = Vec::new();
+    for v in other_commands.split(" && ") {
+        collection.push(v.to_owned());
+    }
+    
+    sleep(500);
+    
+    for c in collection {
+
+        write_key(&"General".to_string(), "running_pid", "1");
+        let output = Command::new("cmd.exe")
+            .creation_flags(CREATE_NO_WINDOW)
+            .arg("/c")
+            .raw_arg(&c)
+            .spawn();
+        match output {
+            Ok(o) => log!(format!("Running {}\n\n{o:?}", &c)),
+            Err(e) => log!(format!("Could not run {}: {e}", &c), "e"),
+        };
+
+    }
+
+    sleep(3000);
+    let _w = unsafe { SetForegroundWindow(h) };
+    write_key(&"General".to_string(), "running_pid", "0");
+    
 }

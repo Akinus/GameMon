@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 18 Dec 2022 @ 17:01:27                          #
+// Last Modified: Tue, 20 Dec 2022 @ 9:20:19                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -89,6 +89,7 @@ fn main() {
     // Initialize Setup
     reg_check();
     initialize_log();
+    reset_running();
     let _cleanup = Cleanup;
 
     // Create system tray
@@ -171,16 +172,15 @@ fn main() {
         let path = Path::new("Software").join("GameMon");
         
         for sec in hklm.open_subkey(path).unwrap().enum_keys().map(|x| x.unwrap()){
-            
-            let section = match sec.as_str() {
-                "defaults" => continue,
-                "General" => continue,
-                "Idle" => continue,
-                _ => get_section(&sec),
-            };
 
-            let check = std::thread::spawn(move || {
-            
+            let thread = std::thread::spawn(move || {
+                let section = match sec.as_str() {
+                    "defaults" => return,
+                    "General" => return,
+                    "Idle" => return,
+                    _ => get_section(&sec),
+                };
+
                 // let defaults = get_defaults();
                 let wait_time = get_value("Idle".to_string(), "exe_name".to_string());
                 let night_srgb = get_value("defaults".to_string(), "night_hour_srgb_profile".to_string());
@@ -216,11 +216,11 @@ fn main() {
                     
                     if dark_hours(&time_range) {
                         log!("Idle detected during dark hours!");
+                        run_other_commands(&get_value("Idle".to_string(), "other_commands".to_string()));
                         change_open_rgb(&night_orgb);
                         change_signal_rgb(&night_srgb);
                         change_voice_attack(&get_value("Idle".to_string(), "voice_attack_profile".to_string()));
                         run_ahk(&"Idle".to_string());
-                        run_other_commands(&get_value("Idle".to_string(), "other_commands".to_string()));
                         power_monitors(false);
                         write_key(&"General".to_string(), "running_pid", "0");
                         let _v = reg_write_value(&path
@@ -233,12 +233,12 @@ fn main() {
                         
                     } else if get_value("Idle".to_string(), "game_or_win".to_string()) == "Yes" {
 
-                        log!("Idle detected during daylight hours!\nInitiating Screensaver...");
+                        log!("Idle detected during daylight hours!");
+                        run_other_commands(&get_value("Idle".to_string(), "other_commands".to_string()));
                         change_open_rgb(&ss_orgb);
                         change_signal_rgb(&ss_srgb);
                         change_voice_attack(&get_value("Idle".to_string(), "voice_attack_profile".to_string()));
                         run_ahk(&"Idle".to_string());
-                        run_other_commands(&get_value("Idle".to_string(), "other_commands".to_string()));
                         run_screensaver();
                         write_key(&"General".to_string(), "running_pid", "0");
                         let _v = reg_write_value(&path
@@ -248,11 +248,11 @@ fn main() {
 
                     } else {
                         log!("Idle detected during daylight hours!");
+                        run_other_commands(&get_value("Idle".to_string(), "other_commands".to_string()));
                         change_open_rgb(&get_value("Idle".to_string(), "open_rgbprofile".to_string()));
                         change_signal_rgb(&get_value("Idle".to_string(), "signal_rgbprofile".to_string()));
                         change_voice_attack(&get_value("Idle".to_string(), "voice_attack_profile".to_string()));
                         run_ahk(&"Idle".to_string());
-                        run_other_commands(&get_value("Idle".to_string(), "other_commands".to_string()));
                         write_key(&"General".to_string(), "running_pid", "0");
                         let _v = reg_write_value(&path
                             , "current_profile".to_string()
@@ -284,11 +284,11 @@ fn main() {
                             return;
                         } else if current_profile != sec && process_exists(Some(&section.exe_name)) {
                             log!(format!("{sec} detected!"));
+                            run_other_commands(&section.other_commands);
                             change_open_rgb(&section.open_rgbprofile);
                             change_signal_rgb(&section.signal_rgbprofile);
                             change_voice_attack(&section.voice_attack_profile);
                             run_ahk(&sec);
-                            run_other_commands(&section.other_commands);
                             let _v = reg_write_value(&path
                                 , "current_profile".to_string()
                                 , sec.clone());
@@ -307,16 +307,17 @@ fn main() {
                             return;
                         } else if current_profile != sec && window_is_active(Some(&section.exe_name)) {
                             log!(format!("{sec} detected!"));
+                            let _v = reg_write_value(&path
+                                , "current_profile".to_string()
+                                , sec.clone());
+                            run_other_commands(&section.other_commands);
                             change_open_rgb(&section.open_rgbprofile);
                             change_signal_rgb(&section.signal_rgbprofile);
                             change_voice_attack(&section.voice_attack_profile);
                             run_ahk(&sec);
-                            run_other_commands(&section.other_commands);
-                            let _v = reg_write_value(&path
-                                , "current_profile".to_string()
-                                , sec.clone());
                             write_key(&"General".to_string(), "running_pid", "0");
                             close_ahk(&"General".to_string());
+
                         } else if current_profile == sec && window_is_active(Some(&section.exe_name)) == false {
                             log!(format!("{sec} no longer detected!"));
                             close_ahk(&sec);
@@ -329,16 +330,17 @@ fn main() {
                 };
             });
             sleep(250);
-            check.join().unwrap();
+            thread.join().unwrap();
+            
         }; // End Section "For" loop
         
         if gamemon_value("current_profile".to_string()) == "General"
         && get_value("General".to_string(), "running_pid".to_string()) == "0" {
+            run_other_commands(&get_value("General".to_string(), "other_commands".to_string()));
             change_open_rgb(&get_value("General".to_string(), "open_rgbprofile".to_string()));
             change_signal_rgb(&get_value("General".to_string(), "signal_rgbprofile".to_string()));
             change_voice_attack(&get_value("General".to_string(), "voice_attack_profile".to_string()));
             run_ahk(&"General".to_string());
-            run_other_commands(&get_value("General".to_string(), "other_commands".to_string()));
             write_key(&"General".to_string(), "running_pid", "1");
         }
 

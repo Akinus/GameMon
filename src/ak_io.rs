@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 18 Dec 2022 @ 15:46:17                          #
+// Last Modified: Mon, 19 Dec 2022 @ 20:34:24                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -47,7 +47,7 @@ pub mod read {
         };
 
         let r = match pids.is_empty() {
-            true => Ok(0),
+            true => Err("Program Not Found!"),
             false => Ok(pids.last().unwrap().to_owned()),
         };
 
@@ -94,13 +94,6 @@ pub mod read {
         } else {
             return false;
         } 
-    }
-
-    pub fn active_window_name() -> String {
-        let active_pid = get_active_window().unwrap().process_id;
-
-        let s = System::new_all();
-        return s.process(Pid::from(active_pid as usize)).unwrap().name().to_string();
     }
 
     pub struct Instance {
@@ -243,7 +236,7 @@ pub mod read {
                         "game_or_win" => section.game_or_win = d_quote!(&value.to_string()),
                         "running" => section.running = d_quote!(&value.to_string()),
                         "running_pid" => section.running_pid = d_quote!(&value.to_string()),
-                        "other_commands" => section.other_commands = sec.get_raw_value("other_commands").unwrap().to_string(),
+                        "other_commands" => section.other_commands = sec.get_value("other_commands").unwrap(),
                         "priority" => section.priority = d_quote!(&value.to_string()),
                         _ => ()
                     }
@@ -459,6 +452,7 @@ pub mod write {
                 &"defaults" => (),
                 _ => {
                     write_key(&sec, "running", "False");
+                    write_key(&sec, "running_pid", "0");
                 }
             }
         }
