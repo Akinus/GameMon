@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:54:42                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Mon, 19 Dec 2022 @ 22:20:16                          #
+// Last Modified: Wed, 28 Dec 2022 @ 21:15:37                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -29,7 +29,7 @@ pub mod windows {
                 BM_CLICK, GetDesktopWindow
             },
         }};
-    use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
+    use winreg::{RegKey, enums::{HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}};
     use winsafe::{co::{DLGID, HRESULT, COLOR, WS, SS, WS_EX}, gui, WString, SIZE, POINT, prelude::{GuiWindowText, GuiNativeControlEvents, GuiWindow, GuiParent, GuiEvents, user_Hwnd, GuiChildFocus}};
     
     use crate::{ak_utils::{sleep, macros::{log}}, ak_io::{write::{write_key, ss_set, reset_running, write_section, delete_section}, read::{get_section, ss_get, get_defaults, get_value}}};
@@ -452,16 +452,17 @@ pub mod windows {
             self.btn_save.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
-                    write_key(&"defaults".to_string(), "openRGBPath", self2.edit_openRGBpath.text().as_str());
-                    write_key(&"defaults".to_string(), "voiceAttackPath", self2.edit_voiceAttackPath.text().as_str());
-                    write_key(&"defaults".to_string(), "defaultORGBProfile", self2.edit_defaultORGBProfile.text().as_str());
-                    write_key(&"defaults".to_string(), "defaultSRGBProfile", self2.edit_defaultSRGBProfile.text().as_str());
-                    write_key(&"defaults".to_string(), "screensaver_orgb_profile", self2.edit_screensaver_orgb_profile.text().as_str());
-                    write_key(&"defaults".to_string(), "screensaver_srgb_profile", self2.edit_screensaver_srgb_profile.text().as_str());
-                    write_key(&"defaults".to_string(), "night_hour_orgb_profile", self2.edit_night_hour_orgb_profile.text().as_str());
-                    write_key(&"defaults".to_string(), "night_hour_srgb_profile", self2.edit_night_hour_srgb_profile.text().as_str());
-                    write_key(&"defaults".to_string(), "orgb_port", self2.edit_orgb_port.text().as_str());
-                    write_key(&"defaults".to_string(), "orgb_address", self2.edit_orgb_address.text().as_str());
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+                    write_key(&hklm, &"defaults".to_string(), "openRGBPath", self2.edit_openRGBpath.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "voiceAttackPath", self2.edit_voiceAttackPath.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "defaultORGBProfile", self2.edit_defaultORGBProfile.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "defaultSRGBProfile", self2.edit_defaultSRGBProfile.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "screensaver_orgb_profile", self2.edit_screensaver_orgb_profile.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "screensaver_srgb_profile", self2.edit_screensaver_srgb_profile.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "night_hour_orgb_profile", self2.edit_night_hour_orgb_profile.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "night_hour_srgb_profile", self2.edit_night_hour_srgb_profile.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "orgb_port", self2.edit_orgb_port.text().as_str());
+                    write_key(&hklm, &"defaults".to_string(), "orgb_address", self2.edit_orgb_address.text().as_str());
                     match msg_box(None, Some("Saving..."), 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &"defaults".to_string(), o));
@@ -1037,7 +1038,7 @@ pub mod windows {
                         "Idle" => {
                             let section = get_section(&sec);
                             self2.label_exe.set_text("Idle Time in Seconds");
-                            self2.edit_exe.set_text(&ss_get("ScreenSaveTimeOut"));
+                            self2.edit_exe.set_text(&ss_get(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveTimeOut"));
                             self2.label_win_name.set_text("Night Hours (ie: 2130-0630)");
                             self2.edit_win_name.set_text(&section.game_window_name);
                             self2.edit_ahk_name.set_text(&section.name_ofahk);
@@ -1048,7 +1049,7 @@ pub mod windows {
                             self2.label_game_win.set_text("Activate Screensaver?");
                             self2.radio_game_win[0].set_text("Yes");
                             self2.radio_game_win[1].set_text("No");
-                            match ss_get("ScreenSaveActive").as_str() {
+                            match ss_get(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveActive").as_str() {
                                 "1" => {
                                     self2.radio_game_win[0].select(true);
                                     self2.radio_game_win[1].select(false);
@@ -1167,17 +1168,18 @@ pub mod windows {
             self.radio_game_win.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     if let Some(game_or_win) = self2.radio_game_win.checked() {
                         let gow = game_or_win.hwnd().GetWindowText()?;
                         
-                        write_key(&sec, "game_or_win", &gow);
+                        write_key(&hklm, &sec, "game_or_win", &gow);
                         if sec.as_str() == "Idle" {
                             let new_gow = match gow.as_str() {
                                 "Yes" => "1",
                                 _ => "0"
                             };
-                            ss_set("ScreenSaveActive", new_gow);
+                            ss_set(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveActive", new_gow);
                         };
 
                         match msg_box(None, Some("Saving..."), 1000) {
@@ -1190,7 +1192,7 @@ pub mod windows {
                         }
                         
                     }
-                    reset_running();
+                    reset_running(&hklm) ;
 
                     Ok(())
                 }
@@ -1199,11 +1201,12 @@ pub mod windows {
             self.radio_priority.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     if let Some(priority) = self2.radio_priority.checked() {
                         let gow = priority.hwnd().GetWindowText()?;
                         
-                        write_key(&sec, "priority", &gow);
+                        write_key(&hklm, &sec, "priority", &gow);
                         match msg_box(None, Some("Saving..."), 1000) {
                             Ok(o) => {
                                 log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
@@ -1213,7 +1216,7 @@ pub mod windows {
                             }
                         }
                     }
-                    reset_running();
+                    reset_running(&hklm) ;
 
                     Ok(())
                 }
@@ -1222,13 +1225,14 @@ pub mod windows {
             self.btn_cmd_add.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     let mut final_string = "".to_owned();
-                    let reg_cmds = get_value(sec.clone(), "other_commands".to_string());
+                    let reg_cmds = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), sec.clone(), "other_commands".to_string());
                     if reg_cmds.is_empty(){
                         final_string.push_str(&self2.edit_cmd_add.text());
                             
-                        write_key(&sec, "other_commands", &final_string);
+                        write_key(&hklm, &sec, "other_commands", &final_string);
                     } else {
                         let co = reg_cmds.split(" && ");
                         let mut cmd_vec = Vec::new();
@@ -1243,18 +1247,18 @@ pub mod windows {
                             }
                             
                             final_string.push_str(&self2.edit_cmd_add.text());
-                            write_key(&sec, "other_commands", &final_string);
+                            write_key(&hklm, &sec, "other_commands", &final_string);
                         } else {
                             final_string.push_str(&reg_cmds);
                             final_string.push_str(" && ");
                             final_string.push_str(&self2.edit_cmd_add.text());
-                            write_key(&sec, "other_commands", &final_string);
+                            write_key(&hklm, &sec, "other_commands", &final_string);
                         }
                         
                     };
                    
                     self2.edit_cmd_add.set_text("");
-                    let reg_cmds = get_value(sec.clone(), "other_commands".to_string());
+                    let reg_cmds = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), sec.clone(), "other_commands".to_string());
                     self2.cmd_list.items().delete_all();
                     match &reg_cmds.as_str() {
                         &"" => (),
@@ -1273,6 +1277,7 @@ pub mod windows {
             self.btn_cmd_delete.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     let section = get_section(&sec);
                     let cmd = &self2.cmd_list.items().iter_selected().last().unwrap().1;
@@ -1284,7 +1289,7 @@ pub mod windows {
                     if haystack.contains(&needle) {
                         let final_string = str::replace(haystack, &needle, "");
                         
-                        write_key(&sec, "other_commands", &final_string);
+                        write_key(&hklm, &sec, "other_commands", &final_string);
                         self2.edit_cmd_add.set_text("");
                         let section = get_section(&sec);
                         self2.cmd_list.items().delete_all();
@@ -1300,7 +1305,7 @@ pub mod windows {
                     } else if haystack.contains(&cmd.to_string()) {
                         let final_string = str::replace(haystack, &cmd.to_string(), "");
                         
-                        write_key(&sec, "other_commands", &final_string);
+                        write_key(&hklm, &sec, "other_commands", &final_string);
                         self2.edit_cmd_add.set_text("");
                         let section = get_section(&sec);
                         self2.cmd_list.items().delete_all();
@@ -1316,7 +1321,7 @@ pub mod windows {
                     } else {
                         let final_string = haystack;
                         
-                        write_key(&sec, "other_commands", final_string);
+                        write_key(&hklm, &sec, "other_commands", final_string);
                         self2.edit_cmd_add.set_text("");
                         let section = get_section(&sec);
                         self2.cmd_list.items().delete_all();
@@ -1346,7 +1351,7 @@ pub mod windows {
                         _ => {
                             self2.edit_add.set_text("");
                             
-                            write_section(&new);
+                            write_section(&RegKey::predef(HKEY_LOCAL_MACHINE), &new);
                             log!(&format!("Added monitor {}...", &new));
 
                             self2.main_list.items().delete_all();
@@ -1369,7 +1374,7 @@ pub mod windows {
                             }
                         }
                     };
-                    reset_running();
+                    reset_running(&RegKey::predef(HKEY_LOCAL_MACHINE)) ;
                     
                     Ok(())
                 }
@@ -1379,7 +1384,7 @@ pub mod windows {
                 let self2 = self.clone();
                 move || {
                     let sec = &self2.main_list.items().iter_selected().last().unwrap().1;
-                    delete_section(sec);
+                    delete_section(&RegKey::predef(HKEY_LOCAL_MACHINE), sec);
                     log!(format!("Deleted monitor {}...", &sec));
 
                     self2.main_list.items().delete_all();
@@ -1428,7 +1433,7 @@ pub mod windows {
 
                         }
                     };
-                    reset_running();
+                    reset_running(&hklm) ;
                     Ok(())
                 }
             });
@@ -1436,18 +1441,19 @@ pub mod windows {
             self.btn_save.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     
-                    write_key(&sec, "exe_name", &self2.edit_exe.text());
+                    write_key(&hklm, &sec, "exe_name", &self2.edit_exe.text());
 
                     if sec.as_str() == "Idle"{
-                        ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
+                        ss_set(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveTimeOut", &self2.edit_exe.text());
                     };
 
-                    write_key(&sec, "game_window_name", &self2.edit_win_name.text());
+                    write_key(&hklm, &sec, "game_window_name", &self2.edit_win_name.text());
 
                     if self2.edit_ahk_path.text().is_empty() {
-                        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+                        
                         let g_key = hklm.open_subkey("SOFTWARE\\GameMon").unwrap();
                         let mut script_dir: String = g_key.get_value("InstallDir").unwrap();
                         let script_dirname = "\\scripts";
@@ -1465,25 +1471,25 @@ pub mod windows {
                         self2.edit_ahk_path.set_text(&script_dir);
                     }
 
-                    write_key(&sec, "name_ofahk", &self2.edit_ahk_name.text());
-                    write_key(&sec, "path_toahk", &self2.edit_ahk_path.text());
-                    write_key(&sec, "open_rgbprofile", &self2.edit_orgb_profile.text());
-                    write_key(&sec, "voice_attack_profile", &self2.edit_va_profile.text());
-                    write_key(&sec, "signal_rgbprofile", &self2.edit_srgb_profile.text());
+                    write_key(&hklm, &sec, "name_ofahk", &self2.edit_ahk_name.text());
+                    write_key(&hklm, &sec, "path_toahk", &self2.edit_ahk_path.text());
+                    write_key(&hklm, &sec, "open_rgbprofile", &self2.edit_orgb_profile.text());
+                    write_key(&hklm, &sec, "voice_attack_profile", &self2.edit_va_profile.text());
+                    write_key(&hklm, &sec, "signal_rgbprofile", &self2.edit_srgb_profile.text());
                     if let Some(game_or_win) = self2.radio_game_win.checked() {
                         let gow = game_or_win.hwnd().GetWindowText()?;
-                        write_key(&sec, "game-or-win", &gow);
+                        write_key(&hklm, &sec, "game-or-win", &gow);
                         if sec.as_str() == "Idle" {
                             let new_gow = match gow.as_str() {
                                 "Yes" => "1",
                                 _ => "0"
                             };
-                            ss_set("ScreenSaveActive", new_gow);
+                            ss_set(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveActive", new_gow);
                         };
                     }
                     if let Some(priority) = self2.radio_priority.checked() {
                         let gow = priority.hwnd().GetWindowText()?;
-                        write_key(&sec, "priority", &gow);
+                        write_key(&hklm, &sec, "priority", &gow);
                     }
                     log!(&format!("Saved settings for {}...", &sec));
                     match msg_box(None, Some("Saving..."), 1000) {
@@ -1494,7 +1500,7 @@ pub mod windows {
                             log!(&format!("Saved settings for {}...\n\nERROR: Error closing dialog {}", &sec, e), "w");
                         }
                     }
-                    reset_running();
+                    reset_running(&hklm) ;
                     Ok(())
                 }
             });
@@ -1502,15 +1508,16 @@ pub mod windows {
             self.btn_close.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     
-                    write_key(&sec, "exe_name", &self2.edit_exe.text());
+                    write_key(&hklm, &sec, "exe_name", &self2.edit_exe.text());
 
                     if sec.as_str() == "Idle" {
-                        ss_set("ScreenSaveTimeOut", &self2.edit_exe.text());
+                        ss_set(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveTimeOut", &self2.edit_exe.text());
                     };
 
-                    write_key(&sec, "game_window_name", &self2.edit_win_name.text());
+                    write_key(&hklm, &sec, "game_window_name", &self2.edit_win_name.text());
 
                     if self2.edit_ahk_path.text().is_empty() {
                         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
@@ -1531,27 +1538,26 @@ pub mod windows {
                         self2.edit_ahk_path.set_text(&script_dir);
                     }
 
-                    write_key(&sec, "name_ofahk", &self2.edit_ahk_name.text());
-                    write_key(&sec, "path_toahk", &self2.edit_ahk_path.text());
-                    write_key(&sec, "open_rgbprofile", &self2.edit_orgb_profile.text());
-                    write_key(&sec, "voice_attack_profile", &self2.edit_va_profile.text());
-                    write_key(&sec, "signal_rgbprofile", &self2.edit_srgb_profile.text());
+                    write_key(&hklm, &sec, "name_ofahk", &self2.edit_ahk_name.text());
+                    write_key(&hklm, &sec, "path_toahk", &self2.edit_ahk_path.text());
+                    write_key(&hklm, &sec, "open_rgbprofile", &self2.edit_orgb_profile.text());
+                    write_key(&hklm, &sec, "voice_attack_profile", &self2.edit_va_profile.text());
+                    write_key(&hklm, &sec, "signal_rgbprofile", &self2.edit_srgb_profile.text());
                     if let Some(game_or_win) = self2.radio_game_win.checked() {
                         let gow = game_or_win.hwnd().GetWindowText()?;
-                        write_key(&sec, "game-or-win", &gow);
+                        write_key(&hklm, &sec, "game-or-win", &gow);
                         if sec.as_str() == "Idle" {
                             let new_gow = match gow.as_str() {
                                 "Yes" => "1",
                                 _ => "0"
                             };
-                            ss_set("ScreenSaveActive", new_gow);
+                            ss_set(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveActive", new_gow);
                         };
                     }
                     if let Some(priority) = self2.radio_priority.checked() {
                         let gow = priority.hwnd().GetWindowText()?;
-                        write_key(&sec, "priority", &gow);
+                        write_key(&hklm, &sec, "priority", &gow);
                     }
-                    log!(&format!("Saved settings for {}...", &sec));
                     match msg_box(None, Some("Saving..."), 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
@@ -1561,7 +1567,7 @@ pub mod windows {
                         }
                     }
                     self2.wnd.hwnd().DestroyWindow()?;
-                    reset_running();
+                    reset_running(&hklm) ;
                     Ok(())
                 }
             });

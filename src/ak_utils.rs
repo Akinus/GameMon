@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Mon, 19 Dec 2022 @ 7:37:10                           #
+// Last Modified: Wed, 28 Dec 2022 @ 21:06:48                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -28,9 +28,9 @@ pub fn sleep(milliseconds: u64){
 }
 
 pub fn memory_check(){
-    let mem = System::new_all().processes_by_exact_name("GameMon.exe").last().unwrap().memory();
 
-    if mem.cmp(&"1073741824".parse::<u64>().unwrap()) == Ordering::Greater {
+    if System::new_all().processes_by_exact_name("GameMon.exe").last().unwrap().memory()
+        .cmp(&"1073741824".parse::<u64>().unwrap()) == Ordering::Greater {
         exit_app!(0, "Memory allocation too high");
     };
 }
@@ -83,6 +83,8 @@ impl Drop for Cleanup {
 }
 
 pub mod macros {
+
+    use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
     
     macro_rules! d_quote {
         
@@ -127,12 +129,13 @@ pub mod macros {
         ($a:expr,$b:expr) => {
             {
                 log!(format!("Exiting. Reason: {}", $b), "w");
-                log!(format!("{}", reset_running()), "w");
+                let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+                reset_running(&hklm);
                 let all_close = close_all_ahk();
                 assert!(all_close.is_ok());
                 log!(format!("All ahk scripts are closed"), "w");
     
-                write_key(&"defaults".to_string(), "exit_reason", $b);
+                write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
     
                 eventlog::deregister("GameMon Log").unwrap();
                 std::process::exit($a);
