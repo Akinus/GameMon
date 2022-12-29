@@ -5,14 +5,14 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 28 Dec 2022 @ 21:19:36                          #
+// Last Modified: Thu, 29 Dec 2022 @ 0:23:02                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
 // ----------	---	-------------------------------------------------- #
 // #####################################################################
 
-use std::{path::Path, process::Command, os::windows::process::CommandExt, cmp::Ordering};
+use std::{path::Path, process::Command, os::windows::process::CommandExt, cmp::Ordering, sync::{Arc, Mutex}};
 
 use mouse_rs::Mouse;
 use sysinfo::{ProcessExt, System, SystemExt};
@@ -22,7 +22,7 @@ use winapi::{um::{winbase::CREATE_NO_WINDOW, winuser::{GetForegroundWindow, SetF
 use windows_win::{raw::window::{send_message, get_by_class}};
 use winreg::{RegKey, enums::{HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}};
 
-use crate::{ak_utils::{url_encode, macros::{log}, sleep, dark_hours}, ak_io::{read::{get_value, ss_get, get_pid, gamemon_value, user_idle, get_section, process_exists, window_is_active}, write::{reg_write_value, write_key}}};
+use crate::{ak_utils::{url_encode, macros::{log}, sleep, dark_hours}, ak_io::{read::{get_value, ss_get, get_pid, gamemon_value, user_idle, process_exists, window_is_active}, write::{reg_write_value, write_key}}};
 
 //   Import Data ####
 pub fn main_check(system_info: &sysinfo::System){
@@ -188,16 +188,6 @@ pub fn main_check(system_info: &sysinfo::System){
         };
         sleep(250);
     }; // End FOR loop
-
-    if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "current_profile".to_string()) == "General"
-    && get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "running_pid".to_string()) == "0" {
-        run_other_commands("General");
-        change_open_rgb(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "open_rgbprofile".to_string()));
-        change_signal_rgb(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "signal_rgbprofile".to_string()));
-        change_voice_attack(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "voice_attack_profile".to_string()));
-        run_ahk(&"General".to_string());
-        write_key(&RegKey::predef(HKEY_LOCAL_MACHINE), &"General".to_string(), "running_pid", "1");
-    }
     
 }
 
@@ -306,80 +296,97 @@ pub fn get_ahk_pid(sec: &String) -> Result<u32, String> {
 }
 
 pub fn change_signal_rgb(profile: &String){
-    if profile.is_empty() {
-        log!("No SignalRGB Profile found for {profile}");
-        return;
-    }
+    let profile = profile.clone();
+    let thread = std::thread::spawn(move ||{ 
+        if profile.is_empty() {
+            log!("No SignalRGB Profile found for {profile}");
+            return;
+        }
 
-    let sp = &profile;
-    let mut rgb_profile = url_encode(sp.to_string());
+        let sp = &profile;
+        let mut rgb_profile = url_encode(sp.to_string());
 
-    if rgb_profile.contains('?'){
-        rgb_profile.push_str("^&-silentlaunch-");
-    } else {
-        rgb_profile.push_str("?-silentlaunch-");
-    }
-    
-    let command_var = format!("start signalrgb://effect/apply/{}", &rgb_profile);
+        if rgb_profile.contains('?'){
+            rgb_profile.push_str("^&-silentlaunch-");
+        } else {
+            rgb_profile.push_str("?-silentlaunch-");
+        }
+        
+        let command_var = format!("start signalrgb://effect/apply/{}", &rgb_profile);
 
-    let output = run_cmd(&command_var);
+        let output = run_cmd(&command_var);
 
-    if output.is_ok() {
-        log!(format!("Changed SignalRGB to {sp}"));
-    } else {
-        log!(format!("Could not execute SignalRGB Command: {}: {:?}", &command_var, &output.as_ref().unwrap()));
-    }
+        if output.is_ok() {
+            log!(format!("Changed SignalRGB to {sp}"));
+        } else {
+            log!(format!("Could not execute SignalRGB Command: {}: {:?}", &command_var, &output.as_ref().unwrap()));
+        }
+
+    });
+    thread.join().unwrap();  
     
 }
 
 pub fn change_open_rgb(profile: &String){
-    if profile.is_empty() {
-        log!("No OpenRGB Profile found for {profile}");
-        return;
-    }
-
-    let addy = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "defaults".to_string(), "orgb_address".to_string());
-    let port = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "defaults".to_string(), "orgb_port".to_string());
-    let rgb_profile = url_encode(profile.to_string());
-    let command_var = format!("http://{}:{}/{}", addy, port, &rgb_profile);
+    let profile = profile.clone();
     
-    log!(match ureq::post(&command_var)
-        .set("User-Agent",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36")
-        .set("Content-Type", "application/json")
-        .send_string(&format!("Requesting Change OpenRGB profile to {}", &rgb_profile)) {
-            Ok(o) => format!("Changed OpenRGB to {}\n\nResponse:\nCode: {}\nContent: {}\n Url: {}",
-                &rgb_profile, o.status(), o.status_text(), o.get_url()),
-            Err(Error::Status(code, response)) => format!("ERROR: {}", Error::Status(code, response)),
-            transport => format!("ERROR: {}", Error::from(transport.unwrap()))
+    let thread = std::thread::spawn(move ||{
+        if profile.is_empty() {
+            log!("No OpenRGB Profile found for {profile}");
+            return;
         }
-    );
+
+        let addy = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "defaults".to_string(), "orgb_address".to_string());
+        let port = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "defaults".to_string(), "orgb_port".to_string());
+        let rgb_profile = url_encode(profile.to_string());
+        let command_var = format!("http://{}:{}/{}", addy, port, &rgb_profile);
+        
+        log!(match ureq::post(&command_var)
+            .set("User-Agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36")
+            .set("Content-Type", "application/json")
+            .send_string(&format!("Requesting Change OpenRGB profile to {}", &rgb_profile)) {
+                Ok(o) => format!("Changed OpenRGB to {}\n\nResponse:\nCode: {}\nContent: {}\n Url: {}",
+                    &rgb_profile, o.status(), o.status_text(), o.get_url()),
+                Err(Error::Status(code, response)) => format!("ERROR: {}", Error::Status(code, response)),
+                transport => format!("ERROR: {}", Error::from(transport.unwrap()))
+            }
+        );
+    });
+    thread.join().unwrap();
+    
 }
 
 pub fn change_voice_attack(profile: &String){
-    if profile.is_empty() {
-        log!("No VoiceAttack profile found.");
-        return;
-    };
+    let profile = profile.clone();
     
-    let vac = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "defaults".to_string(), "voice_attack_path".to_string());
-    let pro = (&profile).to_string();
-    let cmd = format!("{} -profile {}", &vac, &pro);
+    let thread = std::thread::spawn(move ||{
 
-    let output = Command::new(&vac)
-        .creation_flags(CREATE_NO_WINDOW)
-        .arg("-profile")
-        .arg(&pro)
-        .spawn();
+        if profile.is_empty() {
+            log!("No VoiceAttack profile found.");
+            return;
+        };
+        
+        let vac = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "defaults".to_string(), "voice_attack_path".to_string());
+        let pro = (&profile).to_string();
+        let cmd = format!("{} -profile {}", &vac, &pro);
 
-    if output.is_ok() {
-        log!(format!("Changed VoiceAttack profile to {}\n\n{}", &profile, &cmd));
-    } else {
-        log!(format!("Could not change VoiceAttack profile to {}\n\n{}\nERROR:\n{:?}"
-                    , &profile
-                    , &cmd
-                    , &output.as_ref().unwrap()));
-    }
+        let output = Command::new(&vac)
+            .creation_flags(CREATE_NO_WINDOW)
+            .arg("-profile")
+            .arg(&pro)
+            .spawn();
+
+        if output.is_ok() {
+            log!(format!("Changed VoiceAttack profile to {}\n\n{}", &profile, &cmd));
+        } else {
+            log!(format!("Could not change VoiceAttack profile to {}\n\n{}\nERROR:\n{:?}"
+                        , &profile
+                        , &cmd
+                        , &output.as_ref().unwrap()));
+        }
+    });
+    thread.join().unwrap();
 
 }
 
@@ -411,6 +418,7 @@ pub fn power_monitors(on_off: bool){
 }
 
 pub fn run_screensaver(){
+    let thread = std::thread::spawn(move ||{
     sleep(5000);
     let ss_exe = ss_get(&RegKey::predef(HKEY_CURRENT_USER), "SCRNSAVE.EXE").to_owned();
     match get_pid(Some(&ss_exe)) { // Check for Screensaver
@@ -450,27 +458,30 @@ pub fn run_screensaver(){
                 Err(e) => log!(format!("Failed to run Screensaver!! Error: {}", &e), "e")
             };
         }
-    };
-
-    let take_two = std::thread::spawn(move ||{
-        sleep(5000);
-        match get_pid(Some(&ss_exe)) { // Check for Screensaver
-            Ok(_) => return,
-            _ => {
-                let _z = match Command::new("cmd.exe")
-                .creation_flags(CREATE_NO_WINDOW)
-                .arg("/c")
-                .arg(ss_get(&RegKey::predef(HKEY_CURRENT_USER), "SCRNSAVE.EXE"))
-                .arg("/S")
-                .spawn() {
-                    Ok(r) => log!(format!("Initiating Screensaver...\n\n{r:?}")),
-                    Err(e) => log!(format!("Failed to run Screensaver!! Error: {}", &e), "e")
-                };
-            }
         };
+
+        let take_two = std::thread::spawn(move ||{
+            sleep(5000);
+            match get_pid(Some(&ss_exe)) { // Check for Screensaver
+                Ok(_) => return,
+                _ => {
+                    let _z = match Command::new("cmd.exe")
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .arg("/c")
+                    .arg(ss_get(&RegKey::predef(HKEY_CURRENT_USER), "SCRNSAVE.EXE"))
+                    .arg("/S")
+                    .spawn() {
+                        Ok(r) => log!(format!("Initiating Screensaver...\n\n{r:?}")),
+                        Err(e) => log!(format!("Failed to run Screensaver!! Error: {}", &e), "e")
+                    };
+                }
+            };
+        });
+
+        take_two.join().unwrap();
     });
 
-    take_two.join().unwrap();
+    thread.join().unwrap();
 
 
 }
@@ -486,38 +497,57 @@ pub fn run_other_commands(section: &str){
         return;
     }
 
-    let h = unsafe { GetForegroundWindow() };
-
-    
     let mut collection = Vec::new();
     for v in other_commands.split(" && ") {
         collection.push(v.to_owned());
     }
-    
-    sleep(500);
+
+    let wait_time = match (collection.len() as u64).cmp(&1) {
+        Ordering::Greater => (collection.len() * 100) as u64,
+        _ => (collection.len() * 200) as u64
+    };
+
+    let new_section = section.clone().to_owned();
+    std::thread::spawn(move || {
+        let h = unsafe { GetForegroundWindow() };
+
+        for _ in 0..wait_time {
+            let z = unsafe { GetForegroundWindow() };
+            if z != h {
+                let _w = unsafe { SetForegroundWindow(h) };
+            }
+            sleep(1);
+        }
+
+        write_key(&RegKey::predef(HKEY_LOCAL_MACHINE), &"General".to_string(), "running_pid", "0");
+
+        let _oc = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE), &Path::new("Software").join("GameMon")
+            , "last_other_commands".to_string()
+            , new_section.to_string());
+    });
+
+    let counter = Arc::new(Mutex::new(0));
     
     for c in collection {
 
         write_key(&RegKey::predef(HKEY_LOCAL_MACHINE), &"General".to_string(), "running_pid", "1");
-        let output = Command::new("cmd.exe")
-            .creation_flags(CREATE_NO_WINDOW)
-            .arg("/c")
-            .raw_arg(&c)
-            .spawn();
-        match output {
-            Ok(o) => log!(format!("Running {}\n\n{o:?}", &c)),
-            Err(e) => log!(format!("Could not run {}: {e}", &c), "e"),
-        };
-        sleep(250);
+        
+        let wait_time = Arc::clone(&counter);
 
+        std::thread::spawn(move || {
+            sleep(*wait_time.lock().unwrap());
+            let output = Command::new("cmd.exe")
+                .creation_flags(CREATE_NO_WINDOW)
+                .arg("/c")
+                .raw_arg(&c)
+                .spawn();
+            match output {
+                Ok(o) => log!(format!("Running {}\n\n{o:?}", &c)),
+                Err(e) => log!(format!("Could not run {}: {e}", &c), "e"),
+            };
+            *wait_time.lock().unwrap() += 250;
+        });
+        
     }
 
-    sleep(3000);
-    let _w = unsafe { SetForegroundWindow(h) };
-    write_key(&RegKey::predef(HKEY_LOCAL_MACHINE), &"General".to_string(), "running_pid", "0");
-
-    let _oc = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE), &Path::new("Software").join("GameMon")
-        , "last_other_commands".to_string()
-        , section.clone().to_string());
-    
 }

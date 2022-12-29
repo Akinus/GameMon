@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 28 Dec 2022 @ 21:03:39                          #
+// Last Modified: Wed, 28 Dec 2022 @ 22:12:30                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -72,6 +72,10 @@ use {
 fn main() {
     // Initialize Setup
 
+    use ak_io::read::gamemon_value;
+
+    use crate::{ak_io::read::get_value, ak_run::{run_other_commands, change_open_rgb, change_signal_rgb, change_voice_attack, run_ahk}};
+
 
     
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
@@ -129,13 +133,13 @@ fn main() {
     let _v = reg_write_value(&hklm, &Path::new("Software").join("GameMon")
         , "current_profile".to_string()
         , "General".to_string());
-
+        
     let mut system = System::new_all();
     
     loop {
-
+        
         system.refresh_all();
-
+        
         if system.processes_by_exact_name("GameMon.exe").last().unwrap().memory()
             .cmp(&"1073741824".parse::<u64>().unwrap()) == Ordering::Greater {
                 exit_app!(0, "Memory allocation too high");
@@ -163,7 +167,21 @@ fn main() {
             };
         }
 
-        main_check(&system);
+        let thread = std::thread::spawn(move || {
+            let system = System::new_all();
+            main_check(&system);
+            if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "current_profile".to_string()) == "General"
+            && get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "running_pid".to_string()) == "0" {
+                run_other_commands("General");
+                change_open_rgb(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "open_rgbprofile".to_string()));
+                change_signal_rgb(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "signal_rgbprofile".to_string()));
+                change_voice_attack(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "voice_attack_profile".to_string()));
+                run_ahk(&"General".to_string());
+                write_key(&RegKey::predef(HKEY_LOCAL_MACHINE), &"General".to_string(), "running_pid", "1");
+            }
+        });
+
+        thread.join().unwrap();
         
     } // End Loop
     
