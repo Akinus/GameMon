@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 11 Feb 2023 @ 14:22:59                          #
+// Last Modified: Sat, 11 Feb 2023 @ 15:07:35                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -14,19 +14,19 @@
 
 //   Import Data ####
 pub mod read {
-    use std::{path::Path, cmp::Ordering, ops::Deref, process::Command, os::windows::process::CommandExt, mem};
+    use std::{path::Path, cmp::Ordering};
     use sysinfo::{System, SystemExt, Pid, ProcessExt};
-    use winapi::{um::{winuser::{LASTINPUTINFO, PLASTINPUTINFO, GetLastInputInfo, MONITOR_DEFAULTTOPRIMARY, MONITORINFOEXW, GetMonitorInfoW}, winbase::CREATE_NO_WINDOW, winreg::RegCloseKey}, shared::{windef::{POINT, HMONITOR__, HMONITOR, HDC, LPRECT}, minwindef::{LPARAM, BOOL, TRUE}}};
+    use winapi::{um::{winuser::{LASTINPUTINFO, PLASTINPUTINFO, GetLastInputInfo}}};
     use winreg::{RegKey, enums::{HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER, RegDisposition}};
     use active_win_pos_rs::get_active_window;
-    use winapi::um::winuser::{EnumDisplayMonitors, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+    
 
 
     use crate::{ak_utils::{macros::
     {
         d_quote,
         log
-    }, sleep, dark_hours, HKEY}, ak_io::write::{write_key, reg_section_new, reg_write_value}};
+    }, dark_hours, HKEY}, ak_io::write::{write_key, reg_section_new, reg_write_value}};
 
     pub fn get_pid(pname: Option<&str>) -> Result<u32, &str>{
         let mut pids = Vec::new();

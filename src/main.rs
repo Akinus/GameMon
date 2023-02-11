@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 11 Feb 2023 @ 14:46:01                          #
+// Last Modified: Sat, 11 Feb 2023 @ 15:05:25                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -26,7 +26,7 @@ use {tray_item::TrayItem
     , winsafe::{prelude::*}
     , winsafe::{HWND, co::{MB}}
 };
-use ak_gui::windows::msg_box;
+// use ak_gui::windows::msg_box;
 use crossbeam::{
     thread::scope,
     channel
@@ -82,8 +82,6 @@ use {
 #[cfg(windows)]
 fn main() {
     // Initialize Setup
-
-    use std::borrow::Borrow;
     reg_check(HKEY);
     initialize_log(HKEY);
     reset_running(HKEY);
@@ -139,7 +137,7 @@ fn main() {
     let (exit_tx, exit_rx) = channel::bounded(2);
     // let mut count = 30;
     let mut keys = filtered_keys();
-    let mut new_keys = Vec::new();
+    let mut new_keys = keys.clone();
     let mut idle_time = get_value(HKEY, "Idle", "exe_name").parse::<u64>().unwrap();
     let mut c = gamemon_value(HKEY, "current_profile").to_owned();
 
@@ -156,7 +154,6 @@ fn main() {
             continue;
         }
 
-        new_keys = keys.clone();
         if !new_keys.is_empty(){
             for entry in new_keys {
                 let t = entry.clone();
@@ -176,6 +173,7 @@ fn main() {
             }
         }
 
+        new_keys = keys.clone();
         match rx.try_recv() {
             Ok(Message::Quit) => {
                 exit_tx.send(1).unwrap();
@@ -225,63 +223,63 @@ fn main() {
 //************************************************************ */
 // *********************** TESTS ****************************
 //************************************************************ */
-#[cfg(test)]
-use std::ffi::OsString;
-use std::io::Error;
-use std::mem;
-use std::ptr;
+// #[cfg(test)]
+// use std::ffi::OsString;
+// use std::io::Error;
+// use std::mem;
+// use std::ptr;
 
-use winapi::shared::minwindef::{LPARAM, TRUE, BOOL};
-use winapi::shared::windef::{HMONITOR, HDC, LPRECT};
-use winapi::um::winuser::{EnumDisplayMonitors, GetMonitorInfoW, MONITORINFOEXW};
+// use winapi::shared::minwindef::{LPARAM, TRUE, BOOL};
+// use winapi::shared::windef::{HMONITOR, HDC, LPRECT};
+// use winapi::um::winuser::{EnumDisplayMonitors, GetMonitorInfoW, MONITORINFOEXW};
 
-#[test]
+// #[test]
 
-fn enumerate_monitors() {
-    // Define the vector where we will store the result
-    let mut monitors = Vec::<MONITORINFOEXW>::new();
-    let userdata = &mut monitors as *mut _;
+// fn enumerate_monitors() {
+//     // Define the vector where we will store the result
+//     let mut monitors = Vec::<MONITORINFOEXW>::new();
+//     let userdata = &mut monitors as *mut _;
 
-    let result = unsafe {
-        EnumDisplayMonitors(
-            ptr::null_mut(),
-            ptr::null(),
-            Some(enum_monitor_callback),
-            userdata as LPARAM,
-        )
-    };
+//     let result = unsafe {
+//         EnumDisplayMonitors(
+//             ptr::null_mut(),
+//             ptr::null(),
+//             Some(enum_monitor_callback),
+//             userdata as LPARAM,
+//         )
+//     };
 
-    if result != TRUE {
-        // Get the last error for the current thread.
-        // This is analogous to calling the Win32 API GetLastError.
-        panic!("Could not enumerate monitors: {}", Error::last_os_error());
-    }
+//     if result != TRUE {
+//         // Get the last error for the current thread.
+//         // This is analogous to calling the Win32 API GetLastError.
+//         panic!("Could not enumerate monitors: {}", Error::last_os_error());
+//     }
 
-    for m in monitors{
-        let r = msg_box("", format!("{:?}\n{}", m.rcMonitor, m.dwFlags) , 1500);
-    }
-}
+//     for m in monitors{
+//         let r = msg_box("", format!("{:?}\n{}", m.rcMonitor, m.dwFlags) , 1500);
+//     }
+// }
 
-unsafe extern "system" fn enum_monitor_callback(
-    monitor: HMONITOR,
-    _: HDC,
-    _: LPRECT,
-    userdata: LPARAM,
-) -> BOOL {
-    // Get the userdata where we will store the result
-    let monitors: &mut Vec<MONITORINFOEXW> = mem::transmute(userdata);
+// unsafe extern "system" fn enum_monitor_callback(
+//     monitor: HMONITOR,
+//     _: HDC,
+//     _: LPRECT,
+//     userdata: LPARAM,
+// ) -> BOOL {
+//     // Get the userdata where we will store the result
+//     let monitors: &mut Vec<MONITORINFOEXW> = mem::transmute(userdata);
 
-    // Initialize the MONITORINFOEXW structure and get a pointer to it
-    let mut monitor_info: MONITORINFOEXW = mem::zeroed();
-    monitor_info.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
-    let monitor_info_ptr = <*mut _>::cast(&mut monitor_info);
+//     // Initialize the MONITORINFOEXW structure and get a pointer to it
+//     let mut monitor_info: MONITORINFOEXW = mem::zeroed();
+//     monitor_info.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
+//     let monitor_info_ptr = <*mut _>::cast(&mut monitor_info);
 
-    // Call the GetMonitorInfoW win32 API
-    let result = GetMonitorInfoW(monitor, monitor_info_ptr);
-    if result == TRUE {
-        // Push the information we received to userdata
-        monitors.push(monitor_info);
-    }
+//     // Call the GetMonitorInfoW win32 API
+//     let result = GetMonitorInfoW(monitor, monitor_info_ptr);
+//     if result == TRUE {
+//         // Push the information we received to userdata
+//         monitors.push(monitor_info);
+//     }
 
-    TRUE
-}
+//     TRUE
+// }

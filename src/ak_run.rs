@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 11 Feb 2023 @ 14:12:05                          #
+// Last Modified: Sat, 11 Feb 2023 @ 15:06:32                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -24,7 +24,7 @@ use winapi::{um::{winbase::CREATE_NO_WINDOW, winuser::{GetForegroundWindow, SetF
 use windows_win::{raw::window::{send_message, get_by_class}};
 use winreg::{RegKey, enums::{HKEY_LOCAL_MACHINE}};
 
-use crate::{ak_utils::{url_encode, macros::{log}, sleep, dark_hours, HKEY}, ak_io::{read::{get_value, ss_get, get_pid, gamemon_value, user_idle, Instance, get_idle, get_section, process_exists, window_is_active}, write::{reg_write_value, write_key}}};
+use crate::{ak_utils::{url_encode, macros::{log}, sleep}, ak_io::{read::{get_value, ss_get, get_pid, gamemon_value, Instance}, write::{reg_write_value, write_key}}};
 
 pub fn activate<T>(instruction: (T, Instance)) where T: ToString {
     

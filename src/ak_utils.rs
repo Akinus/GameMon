@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Mon, 06 Feb 2023 @ 22:00:47                          #
+// Last Modified: Sat, 11 Feb 2023 @ 15:09:19                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -13,16 +13,15 @@
 // #####################################################################
 
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{Local, NaiveTime, Timelike};
-use sysinfo::{System, SystemExt, ProcessExt};
+
+use chrono::{NaiveTime};
 use winreg::RegKey;
 use winreg::enums::HKEY_LOCAL_MACHINE;
 
-use crate::ak_utils::macros::{exit_app, log};
+use crate::ak_utils::macros::{exit_app};
 use crate::ak_run::close_all_ahk;
-use crate::ak_io::write::{reset_running, write_key, reg_write_value};
+use crate::ak_io::write::{reg_write_value};
 
 //   Import Data ####
 pub fn sleep(milliseconds: u64){
