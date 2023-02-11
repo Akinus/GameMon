@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 11 Feb 2023 @ 15:06:32                          #
+// Last Modified: Sat, 11 Feb 2023 @ 15:14:34                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -155,7 +155,7 @@ pub fn activate<T>(instruction: (T, Instance)) where T: ToString {
                     , "last_profile".to_string()
                     , gamemon_value(
                             &RegKey::predef(HKEY_LOCAL_MACHINE)
-                            , "current_profile".to_string())
+                            , "current_profile")
                 );
 
                 let _p = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
@@ -687,7 +687,7 @@ pub fn run_other_commands(section_and_commands: (String, &str)) -> String {
     let section = section_and_commands.0;
     let other_commands = section_and_commands.1;
     
-    if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "last_other_commands".to_owned()) == section {
+    if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "last_other_commands") == section {
         return "".to_string();
     };
     

@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 11 Feb 2023 @ 15:07:35                          #
+// Last Modified: Sat, 11 Feb 2023 @ 15:15:07                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -351,8 +351,7 @@ pub mod read {
         return_value
     }
 
-    pub fn gamemon_value<T>(hkey: &RegKey, key: T) -> String where T: ToString {
-        let key = key.to_string();
+    pub fn gamemon_value(hkey: &RegKey, key: &str) -> String {
         let hklm = hkey;
         let path = Path::new("Software").join("GameMon");
         let gamemon = hklm.open_subkey(&path).unwrap();
@@ -514,9 +513,6 @@ pub mod read {
             },
         }
     
-        
-    
-        
     }
 
     pub fn user_idle(wait_time: u64) -> bool {
@@ -554,44 +550,6 @@ pub mod read {
             return false;
         }
     }
-
-
-    // pub fn is_monitor_on() -> bool {
-    //     let mut monitor_on = false;
-    //     let mut monitor_info = MONITORINFO::default();
-    //     unsafe {
-    //         EnumDisplayMonitors(
-    //             std::ptr::null_mut(),
-    //             std::ptr::null_mut(),
-    //             Some(enum_monitor_callback),
-    //             &mut monitor_on as *mut bool as *mut _,
-    //         );
-    //     }
-    //     monitor_on
-    // }
-
-    
-
-    // unsafe extern "system" fn enum_monitor_callback(
-    //     hmonitor: std::ptr::NonNull<HMONITOR__>,
-    //     _hdc: std::ptr::NonNull<()>,
-    //     _lprect: *mut std::ffi::c_void,
-    //     lparam: std::ptr::NonNull<()>,
-    // ) -> i32 {
-    //     let mut monitor_info = MONITORINFO::default();
-    //     monitor_info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-    //     let pt = POINT { x: 0, y: 0 };
-    //     let dw_flags = MONITOR_DEFAULTTOPRIMARY;
-    //     if MonitorFromPoint(pt, dw_flags) == hmonitor.as_ptr()
-    //     {
-    //         let monitor_on_ptr = lparam.as_ptr() as *mut bool;
-    //         *monitor_on_ptr = 
-    //         !winapi::um::winuser::MONITORINFOF::from_bits(monitor_info.dwFlags)
-    //             .unwrap()
-    //             .contains(winapi::um::winuser::MONITORINFOF::MONITOR_OFF);
-    //     }
-    //     1
-    // }
 
 }
 
