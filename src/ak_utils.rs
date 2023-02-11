@@ -5,21 +5,24 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 28 Dec 2022 @ 21:06:48                          #
+// Last Modified: Mon, 06 Feb 2023 @ 22:00:47                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
 // ----------	---	-------------------------------------------------- #
 // #####################################################################
 
-use std::cmp::Ordering;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{Local, NaiveTime};
+use chrono::{Local, NaiveTime, Timelike};
 use sysinfo::{System, SystemExt, ProcessExt};
+use winreg::RegKey;
+use winreg::enums::HKEY_LOCAL_MACHINE;
 
 use crate::ak_utils::macros::{exit_app, log};
 use crate::ak_run::close_all_ahk;
-use crate::ak_io::write::{reset_running, write_key};
+use crate::ak_io::write::{reset_running, write_key, reg_write_value};
 
 //   Import Data ####
 pub fn sleep(milliseconds: u64){
@@ -27,33 +30,40 @@ pub fn sleep(milliseconds: u64){
     std::thread::sleep(mills);
 }
 
-pub fn memory_check(){
+pub fn dark_hours(time_range: &String) -> bool {
+    let start_hour= time_range[0..2].parse().unwrap();
+    let start_minute= time_range[2..4].parse().unwrap();
+    let end_hour= time_range[5..7].parse::<u32>().unwrap();
+    let end_minute= time_range[7..9].parse().unwrap();
 
-    if System::new_all().processes_by_exact_name("GameMon.exe").last().unwrap().memory()
-        .cmp(&"1073741824".parse::<u64>().unwrap()) == Ordering::Greater {
-        exit_app!(0, "Memory allocation too high");
-    };
+    let start_time = NaiveTime::from_hms(start_hour, start_minute, 0);
+    let end_time = NaiveTime::from_hms(end_hour, end_minute, 0);
+
+    // Get the current time
+    let current_time = chrono::Local::now().time();
+
+
+    // Return true if the current hour and minute are within the specified range (inclusive)
+    if (start_hour > 12) &&  (end_hour < 12)
+    && ((current_time < start_time) && (current_time > end_time))
+    {
+        let _v = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
+                , &Path::new("Software").join("GameMon")
+                , "night".to_string()
+                , "false".to_string()
+        );
+        return false
+    } else {
+        let _v = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
+                , &Path::new("Software").join("GameMon")
+                , "night".to_string()
+                , "true".to_string()
+        );
+        return true
+    }
 }
 
-pub fn dark_hours(time_range: &String) -> bool {
-    let time_of_day = Local::now().time();
-    let time_vec = time_range.split("-").collect::<Vec<&str>>();
-    let end_num = &time_vec[1].parse::<u64>().unwrap();
-    let start_time = NaiveTime::parse_from_str(&time_vec[0], "%H%M").unwrap();
-    let end_time = NaiveTime::parse_from_str(&time_vec[1], "%H%M").unwrap();
 
-    if end_num < &1200 {
-        if (time_of_day > end_time) && (time_of_day < start_time) {
-            return false
-        } else {
-            return true
-        }
-    } else if (time_of_day > start_time) && (time_of_day < end_time) {
-            return true
-        } else {
-            return false
-        }
-    }
 
 pub fn url_encode(data: String) -> String{
     let data = str::replace(&data, "\n", "%0A");
@@ -74,6 +84,8 @@ pub enum Message {
     Logs,
 }
 
+pub const HKEY: &winreg::RegKey = &RegKey::predef(HKEY_LOCAL_MACHINE);
+
 pub struct Cleanup;
 
 impl Drop for Cleanup {
@@ -84,8 +96,6 @@ impl Drop for Cleanup {
 
 pub mod macros {
 
-    use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
-    
     macro_rules! d_quote {
         
         ($a:expr) => {
@@ -125,12 +135,48 @@ pub mod macros {
                 std::process::abort();           
             }
         };
+
+        ($c:expr) => {
+            {
+                log!("Exiting.  Reason: Shutdown", "w");
+                for handle in $c {
+                    handle.join().unwrap();
+                }
+                log!(format!("{}", reset_running()), "w");
+                let all_close = close_all_ahk();
+                assert!(all_close.is_ok());
+                log!(format!("All ahk scripts are closed"), "w");
+    
+                write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
+    
+                eventlog::deregister("GameMon Log").unwrap();
+                
+                std::process::exit(0);         
+            }
+        };
     
         ($a:expr,$b:expr) => {
             {
                 log!(format!("Exiting. Reason: {}", $b), "w");
                 let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-                reset_running(&hklm);
+                let all_close = close_all_ahk();
+                assert!(all_close.is_ok());
+                log!(format!("All ahk scripts are closed"), "w");
+    
+                write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
+    
+                eventlog::deregister("GameMon Log").unwrap();
+                std::process::exit($a);
+            }
+        };
+
+        ($a:expr,$b:expr, $c:expr) => {
+            {
+                log!(format!("Exiting. Reason: {}", $b), "w");
+                let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+                for handle in $c {
+                    handle.join().unwrap();
+                }
                 let all_close = close_all_ahk();
                 assert!(all_close.is_ok());
                 log!(format!("All ahk scripts are closed"), "w");

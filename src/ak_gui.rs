@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:54:42                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 28 Dec 2022 @ 21:15:37                          #
+// Last Modified: Sat, 11 Feb 2023 @ 14:35:55                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -34,39 +34,41 @@ pub mod windows {
     
     use crate::{ak_utils::{sleep, macros::{log}}, ak_io::{write::{write_key, ss_set, reset_running, write_section, delete_section}, read::{get_section, ss_get, get_defaults, get_value}}};
     
-    pub fn msg_box(title: Option<&str>, message: Option<&str>, exit_wait_time_in_ms: u64) -> Result<DLGID, HRESULT> {
-        let ftitle = match title {
-            Some(t) => t,
-            None => "GameMon"
-        };
-        
-        let fmessage = match message {
-            Some(m) => m,
-            None => "Test"
-        };
+    pub fn msg_box<T, M, W>(title: T, message: M, exit_wait_time_in_ms: W) 
+        -> Result<DLGID, HRESULT> where T: ToString, M: ToString, W: ToString
+    {
+        let mut title = title.to_string();
+        let mut message = message.to_string();
+        let exit_wait_time_in_ms = exit_wait_time_in_ms.to_string().parse::<u64>().unwrap();
 
-        let til = String::from(ftitle);
-        let msg = String::from(fmessage);
+        if title == "" {
+            title = "GAMEMON".to_string();
+        }
+
+        if message == "" {
+            message = "TEST".to_string();
+        }
+
+        let til = title.clone();
+        let msg = message.clone();
 
         return match exit_wait_time_in_ms {
             0 => {
-                let _rr = msgbox::create(&ftitle, &fmessage, msgbox::IconType::Info);
+                let _rr = msgbox::create(&title, &message, msgbox::IconType::Info);
                 Ok(DLGID::OK)
             },
             _ => {
                 
-                std::thread::spawn(move ||{
+                let m_box = std::thread::spawn(move ||{
                     let _rr = msgbox::create(&til,&msg, msgbox::IconType::Info);
-            
                 });
-                sleep(exit_wait_time_in_ms);
-    
-    
                 let hwnd1 = unsafe {GetDesktopWindow()};
+                sleep(50);
     
-                let p = get_by_title(&ftitle, Some(hwnd1)).unwrap().last().unwrap().to_owned();
+                let p = get_by_title(&title, Some(hwnd1)).unwrap().last().unwrap().to_owned();
                 let b = get_by_title("OK", Some(p)).unwrap().last().unwrap().to_owned();
-    
+                
+                sleep(exit_wait_time_in_ms);
                 let s = send_message(b, BM_CLICK , 0, 0, Some(5));
     
                 let r = match s {
@@ -74,11 +76,11 @@ pub mod windows {
                         Ok(DLGID::OK)
                     }, 
                     Err(e) => {
-                        log!(format!("Could not close MsgBox!\nTitle: {ftitle}\nText: {fmessage}\nHandle: {p:?}\nError: {e}"), "e" );
+                        log!(format!("Could not close MsgBox!\nTitle: {title}\nText: {message}\nHandle: {p:?}\nError: {e}"), "e" );
                         Err(HRESULT::E_INVALIDARG)
                     }
                 };
-    
+                m_box.join().unwrap();
                 r
             }
         };        
@@ -463,7 +465,7 @@ pub mod windows {
                     write_key(&hklm, &"defaults".to_string(), "night_hour_srgb_profile", self2.edit_night_hour_srgb_profile.text().as_str());
                     write_key(&hklm, &"defaults".to_string(), "orgb_port", self2.edit_orgb_port.text().as_str());
                     write_key(&hklm, &"defaults".to_string(), "orgb_address", self2.edit_orgb_address.text().as_str());
-                    match msg_box(None, Some("Saving..."), 1000) {
+                    match msg_box("", "Saving...", 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &"defaults".to_string(), o));
                         },
@@ -517,6 +519,7 @@ pub mod windows {
         pub btn_cmd_add: gui::Button,
         pub edit_cmd_add: gui::Edit,
         pub btn_cmd_delete: gui::Button,
+        pub btn_cmd_edit: gui::Button,
         pub cmd_list: gui::ListBox,
 
     }
@@ -539,7 +542,7 @@ pub mod windows {
                         WS::BORDER | 
                         WS::VISIBLE,
                     ex_style: WS_EX::TRANSPARENT,
-                    size: SIZE::new(900, 825),
+                    size: SIZE::new(900, 855),
                     ..Default::default() 
                 },
             );
@@ -880,6 +883,18 @@ pub mod windows {
                 },
             );
 
+            let last_y = last_y + 28;
+
+            let btn_cmd_edit = gui::Button::new(
+                &wnd, 
+                gui::ButtonOpts {
+                    width: 150,
+                    text: "&Edit".to_owned(),
+                    position: POINT::new(10, last_y),
+                    ..Default::default()
+                },
+            );
+
             let cmd_list = gui::ListBox::new(
                 &wnd,
                 gui::ListBoxOpts{
@@ -939,6 +954,7 @@ pub mod windows {
                 cmd_list,
                 label_priority,
                 radio_priority,
+                btn_cmd_edit
             };
             new_self.events(); // attach our events
             new_self
@@ -980,7 +996,7 @@ pub mod windows {
                     match &sec.as_str() {
                         &"defaults" => (),
                         _ => {
-                            let section = get_section(&sec);
+                            let section = get_section(sec);
                         
                             
                             self2.edit_exe.set_text(&section.exe_name);
@@ -1036,9 +1052,9 @@ pub mod windows {
                     match sec.as_str() {
                         "defaults" => (),
                         "Idle" => {
-                            let section = get_section(&sec);
+                            let section = get_section(sec);
                             self2.label_exe.set_text("Idle Time in Seconds");
-                            self2.edit_exe.set_text(&ss_get(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveTimeOut"));
+                            self2.edit_exe.set_text(&ss_get("ScreenSaveTimeOut"));
                             self2.label_win_name.set_text("Night Hours (ie: 2130-0630)");
                             self2.edit_win_name.set_text(&section.game_window_name);
                             self2.edit_ahk_name.set_text(&section.name_ofahk);
@@ -1049,7 +1065,7 @@ pub mod windows {
                             self2.label_game_win.set_text("Activate Screensaver?");
                             self2.radio_game_win[0].set_text("Yes");
                             self2.radio_game_win[1].set_text("No");
-                            match ss_get(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveActive").as_str() {
+                            match ss_get("ScreenSaveActive").as_str() {
                                 "1" => {
                                     self2.radio_game_win[0].select(true);
                                     self2.radio_game_win[1].select(false);
@@ -1098,7 +1114,7 @@ pub mod windows {
                             }
                         }
                         _ => {
-                            let section = get_section(&sec);
+                            let section = get_section(sec);
                             self2.label_exe.set_text("Process Name");
                             self2.edit_exe.set_text(&section.exe_name);
                             self2.label_win_name.set_text("Window Name / Title");
@@ -1182,7 +1198,7 @@ pub mod windows {
                             ss_set(&RegKey::predef(HKEY_CURRENT_USER), "ScreenSaveActive", new_gow);
                         };
 
-                        match msg_box(None, Some("Saving..."), 1000) {
+                        match msg_box("", "Saving...", 1000) {
                             Ok(o) => {
                                 log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                             },
@@ -1207,7 +1223,7 @@ pub mod windows {
                         let gow = priority.hwnd().GetWindowText()?;
                         
                         write_key(&hklm, &sec, "priority", &gow);
-                        match msg_box(None, Some("Saving..."), 1000) {
+                        match msg_box("", "Saving...", 1000) {
                             Ok(o) => {
                                 log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                             },
@@ -1225,36 +1241,40 @@ pub mod windows {
             self.btn_cmd_add.on().bn_clicked({
                 let self2 = self.clone();
                 move || {
+                    self2.btn_cmd_add.set_text("Add");
                     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
                     let mut final_string = "".to_owned();
-                    let reg_cmds = get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), sec.clone(), "other_commands".to_string());
-                    if reg_cmds.is_empty(){
-                        final_string.push_str(&self2.edit_cmd_add.text());
-                            
+                    let reg_cmds = get_value(
+                                            &RegKey::predef(HKEY_LOCAL_MACHINE)
+                                            , sec.clone()
+                                            , "other_commands".to_string()
+                    );
+                    // First, check if the button is being pressed to complete a current edit. If so, 
+                    // replace the new command in the edited slot.
+                    let needle = "--EDITING--";
+                    let haystack = &reg_cmds;
+
+                    if haystack.contains(&needle){
+                        final_string = reg_cmds
+                                        .replace(
+                                        "--EDITING--"
+                                        , &self2.edit_cmd_add.text()
+                        );
                         write_key(&hklm, &sec, "other_commands", &final_string);
+
+                    // If the registry entry for other commands is empty, then this must be the first command
+                    } else if reg_cmds.is_empty(){
+                        final_string.push_str(&self2.edit_cmd_add.text());
+                        write_key(&hklm, &sec, "other_commands", &final_string);
+
+                    // Here we know that this is not the first command, and it is not an edit.
+                    // Add the new command to the end of the list of commands. 
                     } else {
-                        let co = reg_cmds.split(" && ");
-                        let mut cmd_vec = Vec::new();
-                        for o in co {
-                            cmd_vec.push(o);
-                        };
-                        let len = cmd_vec.len() as u32;
-                        if len.cmp(&(1 as u32)) == Ordering::Greater {
-                            for c in cmd_vec {
-                                final_string.push_str(c);
-                                final_string.push_str(" && ");
-                            }
-                            
-                            final_string.push_str(&self2.edit_cmd_add.text());
-                            write_key(&hklm, &sec, "other_commands", &final_string);
-                        } else {
-                            final_string.push_str(&reg_cmds);
-                            final_string.push_str(" && ");
-                            final_string.push_str(&self2.edit_cmd_add.text());
-                            write_key(&hklm, &sec, "other_commands", &final_string);
-                        }
-                        
+                        final_string.push_str(&reg_cmds);
+                        final_string.push_str(" && ");
+                        final_string.push_str(&self2.edit_cmd_add.text());
+                        write_key(&hklm, &sec, "other_commands", &final_string);
                     };
                    
                     self2.edit_cmd_add.set_text("");
@@ -1279,7 +1299,7 @@ pub mod windows {
                 move || {
                     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
                     let sec = self2.main_list.items().iter_selected().last().unwrap().1;
-                    let section = get_section(&sec);
+                    let section = get_section(sec.clone());
                     let cmd = &self2.cmd_list.items().iter_selected().last().unwrap().1;
                     let mut needle = cmd.to_owned();
                     needle.push_str(" && ");
@@ -1291,7 +1311,7 @@ pub mod windows {
                         
                         write_key(&hklm, &sec, "other_commands", &final_string);
                         self2.edit_cmd_add.set_text("");
-                        let section = get_section(&sec);
+                        let section = get_section(sec);
                         self2.cmd_list.items().delete_all();
                         match &section.other_commands.as_str() {
                             &"" => (),
@@ -1307,7 +1327,7 @@ pub mod windows {
                         
                         write_key(&hklm, &sec, "other_commands", &final_string);
                         self2.edit_cmd_add.set_text("");
-                        let section = get_section(&sec);
+                        let section = get_section(sec);
                         self2.cmd_list.items().delete_all();
                         match &section.other_commands.as_str() {
                             &"" => (),
@@ -1323,7 +1343,7 @@ pub mod windows {
                         
                         write_key(&hklm, &sec, "other_commands", final_string);
                         self2.edit_cmd_add.set_text("");
-                        let section = get_section(&sec);
+                        let section = get_section(sec);
                         self2.cmd_list.items().delete_all();
                         match &section.other_commands.as_str() {
                             &"" => (),
@@ -1339,6 +1359,63 @@ pub mod windows {
                     
 
                     Ok(())
+                }
+            });
+
+            self.btn_cmd_edit.on().bn_clicked({
+                let self2 = self.clone();
+                move || {
+                    // This button will add the selected command to the edit text box, and delete it from the list
+                    // The user can then edit the command and re-add it to the list. 
+                    self2.btn_cmd_add.set_text("Save");
+                    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+                    let sec = self2.main_list.items().iter_selected().last().unwrap().1;
+                    let section = get_section(sec.clone());
+                    if *&self2.cmd_list.items().iter_selected().count() as u8 != 0 {
+                      let cmd = &self2.cmd_list.items().iter_selected().last().unwrap().1;
+                    
+                        let haystack = &section.other_commands;
+
+                        if haystack.contains(&cmd.to_string()) {
+                            self2.edit_cmd_add.set_text(&cmd);
+                            let final_string = 
+                                str::replace(
+                                    haystack
+                                    , &cmd.to_string()
+                                    , "--EDITING--"
+                            );
+                            
+                            write_key(&hklm, &sec, "other_commands", &final_string);
+                            let section = get_section(sec);
+                            self2.cmd_list.items().delete_all();
+                            match &section.other_commands.as_str() {
+                                &"" => (),
+                                s => {
+                                    let cmds = s.split(" && ");
+                                    for c in cmds {
+                                        self2.cmd_list.items().add(&[c]);
+                                    }
+                                }
+                            }
+                        } else {
+                            let final_string = haystack;
+                            
+                            write_key(&hklm, &sec, "other_commands", final_string);
+                            self2.edit_cmd_add.set_text("");
+                            let section = get_section(sec);
+                            self2.cmd_list.items().delete_all();
+                            match &section.other_commands.as_str() {
+                                &"" => (),
+                                s => {
+                                    let cmds = s.split(" && ");
+                                    for c in cmds {
+                                        self2.cmd_list.items().add(&[c]);
+                                    }
+                                }
+                            }
+                        };
+                    };
+                    Ok(())  
                 }
             });
 
@@ -1412,7 +1489,7 @@ pub mod windows {
                     match sec.as_str() {
                         "defaults" => (),
                         _ => {
-                            let section = get_section(&sec);
+                            let section = get_section(sec);
                             self2.edit_exe.set_text(&section.exe_name);
                             self2.edit_win_name.set_text(&section.game_window_name);
                             self2.edit_ahk_name.set_text(&section.name_ofahk);
@@ -1458,7 +1535,7 @@ pub mod windows {
                         let mut script_dir: String = g_key.get_value("InstallDir").unwrap();
                         let script_dirname = "\\scripts";
                         script_dir.push_str(script_dirname);
-                        script_dir.push_str(&format!("\\{}.ahk", &sec));
+                        script_dir.push_str(&format!("\\{}.ahk", &sec.replace(" ", "_")));
 
                         File::create(&script_dir).unwrap();
                         let mut lfile = OpenOptions::new()
@@ -1492,7 +1569,7 @@ pub mod windows {
                         write_key(&hklm, &sec, "priority", &gow);
                     }
                     log!(&format!("Saved settings for {}...", &sec));
-                    match msg_box(None, Some("Saving..."), 1000) {
+                    match msg_box("", "Saving...", 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                         },
@@ -1558,7 +1635,7 @@ pub mod windows {
                         let gow = priority.hwnd().GetWindowText()?;
                         write_key(&hklm, &sec, "priority", &gow);
                     }
-                    match msg_box(None, Some("Saving..."), 1000) {
+                    match msg_box("", "Saving...", 1000) {
                         Ok(o) => {
                             log!(&format!("Saved settings for {}...\n\n{}", &sec, o));
                         },

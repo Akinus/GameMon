@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 28 Dec 2022 @ 22:12:30                          #
+// Last Modified: Sat, 11 Feb 2023 @ 14:46:01                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -22,13 +22,16 @@
   )]
 //   Import Data ####
 // extern crate winreg;
-use {std::{sync::mpsc, path::Path, cmp::Ordering}
-    , tray_item::TrayItem
+use {tray_item::TrayItem
     , winsafe::{prelude::*}
     , winsafe::{HWND, co::{MB}}
 };
-use winreg::{RegKey, enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}};
-use sysinfo::{System, SystemExt, ProcessExt};
+use ak_gui::windows::msg_box;
+use crossbeam::{
+    thread::scope,
+    channel
+};
+
 mod ak_io;
 mod ak_utils;
 mod ak_gui;
@@ -37,29 +40,37 @@ use {
     ak_run::{
         close_all_ahk,
         run_cmd,
-        main_check
+        activate,
+        deactivate
     }
     , ak_io::{
         write::
             {
                 write_key,
                 reset_running,
-                reg_write_value,
             },
         read::
             {
                 reg_check,
+                gamemon_value,
+                get_section,
+                user_idle,
+                get_idle,
+                get_value,
+                filtered_keys
             },
         logging::initialize_log
     }
     , ak_utils::{
         Cleanup,
+        sleep,
         macros::
             {
                 exit_app,
                 log
             },
-        Message
+        Message,
+        HKEY
     }
     , ak_gui::windows::{
         main_gui,
@@ -72,21 +83,14 @@ use {
 fn main() {
     // Initialize Setup
 
-    use ak_io::read::gamemon_value;
-
-    use crate::{ak_io::read::get_value, ak_run::{run_other_commands, change_open_rgb, change_signal_rgb, change_voice_attack, run_ahk}};
-
-
-    
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    reg_check(&hklm);
-    initialize_log(&hklm);
-    reset_running(&hklm);
+    use std::borrow::Borrow;
+    reg_check(HKEY);
+    initialize_log(HKEY);
+    reset_running(HKEY);
     let _cleanup = Cleanup;
 
     // Create system tray
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = channel::bounded(2);
     let mut tray = TrayItem::new("GameMon", "my-icon-name").unwrap();
 
     tray.add_label("GameMon").unwrap();
@@ -126,65 +130,89 @@ fn main() {
 
     tray.add_menu_item("Quit", move || {
         println!("Quit");
-        txc.send(Message::Quit).unwrap();
+        for _ in 0..10 {
+            txc.send(Message::Quit).unwrap();
+        }
     })
     .unwrap();
 
-    let _v = reg_write_value(&hklm, &Path::new("Software").join("GameMon")
-        , "current_profile".to_string()
-        , "General".to_string());
-        
-    let mut system = System::new_all();
-    
-    loop {
-        
-        system.refresh_all();
-        
-        if system.processes_by_exact_name("GameMon.exe").last().unwrap().memory()
-            .cmp(&"1073741824".parse::<u64>().unwrap()) == Ordering::Greater {
-                exit_app!(0, "Memory allocation too high");
-        };
-        
-        'channel: loop {
-            match rx.try_recv(){
-                Ok(Message::Quit) => exit_app!(1, "Menu"),
-                Ok(Message::Gui) => {
-                    let t = std::thread::spawn(|| {
-                        main_gui();
-                    });
-                    t.join().unwrap();
-                },
-                Ok(Message::Defaults) => {
-                    let t = std::thread::spawn(||{
-                        defaults_gui();
-                    });
-                    t.join().unwrap();
-                },
-                Ok(Message::Logs) => {
-                    let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
-                },
-                Err(_) => break 'channel,
-            };
+    let (exit_tx, exit_rx) = channel::bounded(2);
+    // let mut count = 30;
+    let mut keys = filtered_keys();
+    let mut new_keys = Vec::new();
+    let mut idle_time = get_value(HKEY, "Idle", "exe_name").parse::<u64>().unwrap();
+    let mut c = gamemon_value(HKEY, "current_profile").to_owned();
+
+    'main: loop {
+
+        if user_idle(idle_time) {
+            if &c != &"Idle"{
+                deactivate((&c, get_section(&c)));
+                activate(("Idle", get_idle()));
+                keys = filtered_keys();
+                c = gamemon_value(HKEY, "current_profile").to_owned();
+            }
+            sleep(2000);
+            continue;
         }
 
-        let thread = std::thread::spawn(move || {
-            let system = System::new_all();
-            main_check(&system);
-            if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "current_profile".to_string()) == "General"
-            && get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "running_pid".to_string()) == "0" {
-                run_other_commands("General");
-                change_open_rgb(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "open_rgbprofile".to_string()));
-                change_signal_rgb(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "signal_rgbprofile".to_string()));
-                change_voice_attack(&get_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "General".to_string(), "voice_attack_profile".to_string()));
-                run_ahk(&"General".to_string());
-                write_key(&RegKey::predef(HKEY_LOCAL_MACHINE), &"General".to_string(), "running_pid", "1");
+        new_keys = keys.clone();
+        if !new_keys.is_empty(){
+            for entry in new_keys {
+                let t = entry.clone();
+                if &t.0 != &c {
+                    deactivate((&c, get_section(&c)));
+                    activate(t);
+                    keys = filtered_keys();
+                    c = gamemon_value(HKEY, "current_profile").to_owned();
+                }
             }
-        });
+        } else {
+            if c != "General".to_string() {
+                deactivate((&c, get_section(&c)));
+                activate(("General", get_section("General")));
+                keys = filtered_keys();
+                c = gamemon_value(HKEY, "current_profile").to_owned();
+            }
+        }
 
-        thread.join().unwrap();
+        match rx.try_recv() {
+            Ok(Message::Quit) => {
+                exit_tx.send(1).unwrap();
+                break 'main;
+            },
+            Ok(Message::Gui) => {
+                scope(|s| {
+                    let t = s.spawn(|_| main_gui());
+                    t.join().unwrap();
+                }).unwrap();
+                idle_time = get_value(HKEY, "Idle", "exe_name").parse::<u64>().unwrap();
+            },
+            Ok(Message::Defaults) => {
+                scope(|s| {
+                    s.spawn(|_| defaults_gui());
+                }).unwrap();
+            },
+            Ok(Message::Logs) => {
+                let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
+            },
+            Err(_) => ()
+        };
+        // count += 1;
+        sleep(250);
+    }
+
+    match exit_rx.recv() {
+        Ok(0) => {
+            exit_app!(0, "Memory allocation too high!!");
+        },
+        Ok(1) => {
+            exit_app!(1, "Menu");
+        },
+        Ok(_) => (),
+        Err(_) => ()
+    }
         
-    } // End Loop
-    
 }
                 
                 
@@ -192,4 +220,68 @@ fn main() {
 #[cfg(not(windows))]
 fn main() {
     panic!("This program is only intended to run on Windows.");
+}
+
+//************************************************************ */
+// *********************** TESTS ****************************
+//************************************************************ */
+#[cfg(test)]
+use std::ffi::OsString;
+use std::io::Error;
+use std::mem;
+use std::ptr;
+
+use winapi::shared::minwindef::{LPARAM, TRUE, BOOL};
+use winapi::shared::windef::{HMONITOR, HDC, LPRECT};
+use winapi::um::winuser::{EnumDisplayMonitors, GetMonitorInfoW, MONITORINFOEXW};
+
+#[test]
+
+fn enumerate_monitors() {
+    // Define the vector where we will store the result
+    let mut monitors = Vec::<MONITORINFOEXW>::new();
+    let userdata = &mut monitors as *mut _;
+
+    let result = unsafe {
+        EnumDisplayMonitors(
+            ptr::null_mut(),
+            ptr::null(),
+            Some(enum_monitor_callback),
+            userdata as LPARAM,
+        )
+    };
+
+    if result != TRUE {
+        // Get the last error for the current thread.
+        // This is analogous to calling the Win32 API GetLastError.
+        panic!("Could not enumerate monitors: {}", Error::last_os_error());
+    }
+
+    for m in monitors{
+        let r = msg_box("", format!("{:?}\n{}", m.rcMonitor, m.dwFlags) , 1500);
+    }
+}
+
+unsafe extern "system" fn enum_monitor_callback(
+    monitor: HMONITOR,
+    _: HDC,
+    _: LPRECT,
+    userdata: LPARAM,
+) -> BOOL {
+    // Get the userdata where we will store the result
+    let monitors: &mut Vec<MONITORINFOEXW> = mem::transmute(userdata);
+
+    // Initialize the MONITORINFOEXW structure and get a pointer to it
+    let mut monitor_info: MONITORINFOEXW = mem::zeroed();
+    monitor_info.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
+    let monitor_info_ptr = <*mut _>::cast(&mut monitor_info);
+
+    // Call the GetMonitorInfoW win32 API
+    let result = GetMonitorInfoW(monitor, monitor_info_ptr);
+    if result == TRUE {
+        // Push the information we received to userdata
+        monitors.push(monitor_info);
+    }
+
+    TRUE
 }

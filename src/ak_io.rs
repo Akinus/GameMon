@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 28 Dec 2022 @ 21:00:02                          #
+// Last Modified: Sat, 11 Feb 2023 @ 14:22:59                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -14,17 +14,19 @@
 
 //   Import Data ####
 pub mod read {
-    use std::{path::Path, cmp::Ordering};
+    use std::{path::Path, cmp::Ordering, ops::Deref, process::Command, os::windows::process::CommandExt, mem};
     use sysinfo::{System, SystemExt, Pid, ProcessExt};
-    use winapi::{um::winuser::{LASTINPUTINFO, PLASTINPUTINFO, GetLastInputInfo}};
+    use winapi::{um::{winuser::{LASTINPUTINFO, PLASTINPUTINFO, GetLastInputInfo, MONITOR_DEFAULTTOPRIMARY, MONITORINFOEXW, GetMonitorInfoW}, winbase::CREATE_NO_WINDOW, winreg::RegCloseKey}, shared::{windef::{POINT, HMONITOR__, HMONITOR, HDC, LPRECT}, minwindef::{LPARAM, BOOL, TRUE}}};
     use winreg::{RegKey, enums::{HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER, RegDisposition}};
     use active_win_pos_rs::get_active_window;
+    use winapi::um::winuser::{EnumDisplayMonitors, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 
-    use crate::{ak_utils::macros::
+
+    use crate::{ak_utils::{macros::
     {
         d_quote,
         log
-    }, ak_io::write::{write_key, reg_section_new, reg_write_value}};
+    }, sleep, dark_hours, HKEY}, ak_io::write::{write_key, reg_section_new, reg_write_value}};
 
     pub fn get_pid(pname: Option<&str>) -> Result<u32, &str>{
         let mut pids = Vec::new();
@@ -56,6 +58,7 @@ pub mod read {
     }
 
     pub fn process_exists(pname: Option<&str>) -> bool {
+        
         let mut pids = Vec::new();
         if pname.is_none() {
             return false;
@@ -81,15 +84,17 @@ pub mod read {
         };
 
         return r
+
     }
 
-    pub fn window_is_active(process_name: Option<&str>) -> bool {
+    pub fn window_is_active(process_name: &str) -> bool {
         let active_pid = get_active_window().unwrap().process_id;
 
-        let s = System::new_all();
+        let mut s = System::new();
+        s.refresh_processes();
         let process = s.process(Pid::from(active_pid as usize)).unwrap().name();
            
-        if process == process_name.unwrap() {
+        if process == process_name {
             return true;
         } else {
             return false;
@@ -126,6 +131,25 @@ pub mod read {
                 running_pid: "".to_string(),
                 other_commands: "".to_string(),
                 priority: "".to_string()
+            }
+        }
+    }
+
+    impl Clone for Instance {
+        fn clone(&self) -> Instance {
+            Instance {
+                exe_name: self.exe_name.clone(),
+                game_window_name: self.game_window_name.clone(),
+                name_ofahk: self.name_ofahk.clone(),
+                path_toahk: self.path_toahk.clone(),
+                open_rgbprofile: self.open_rgbprofile.clone(),
+                signal_rgbprofile: self.signal_rgbprofile.clone(),
+                voice_attack_profile: self.voice_attack_profile.clone(),
+                game_or_win: self.game_or_win.clone(),
+                running: self.running.clone(),
+                running_pid: self.running_pid.clone(),
+                other_commands: self.other_commands.clone(),
+                priority: self.priority.clone(),
             }
         }
     }
@@ -214,16 +238,18 @@ pub mod read {
      
     }
 
-    pub fn get_section(sec_name: &String) -> Instance {
+    pub fn get_section<T>(sec_name: T) -> Instance where T: ToString {
+        let sec_name = sec_name.to_string();
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
         let mut path = Path::new("Software").join("GameMon");
         let gamemon = hklm.open_subkey(&path).unwrap();
         path = Path::new("Software").join("GameMon").join(&sec_name);
         let sec = hklm.open_subkey(&path).unwrap();
         let mut section = Instance::new();
+        
     
         for i in gamemon.enum_keys().map(|x| x.unwrap()){
-            if &i == sec_name {
+            if i == sec_name {
                 for (name, value) in sec.enum_values().map(|x| x.unwrap()) {
                     match name.as_str() {
                         "exe_name" => section.exe_name = d_quote!(&value.to_string()),
@@ -248,22 +274,85 @@ pub mod read {
         return section
     }
 
-    pub fn ss_get(hkey: &RegKey, key_name: &'static str) -> String{
+    pub fn get_idle() -> Instance {
+        let defaults = get_defaults();
+        let mut section = get_section("Idle");
+
+        if dark_hours(&section.game_window_name){
+            section.open_rgbprofile = defaults.night_hour_orgb_profile;
+            section.signal_rgbprofile = defaults.night_hour_srgb_profile;
+            section.game_window_name = "Night".to_owned();
+        } else if section.game_or_win == "Yes" {
+            section.open_rgbprofile = defaults.screensaver_orgb_profile;
+            section.signal_rgbprofile = defaults.screensaver_srgb_profile;
+            section.game_window_name = "Day".to_owned();
+        } else {
+            section.game_window_name = "Day".to_owned();
+        }
+            
+        return section
+    }
+
+    pub fn filtered_keys() -> Vec<(String, Instance)> {
+        let current_priority = gamemon_value(HKEY, "current_priority").to_owned();
+        let r = RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(Path::new("Software").join("GameMon"))
+            .unwrap()
+            .enum_keys()
+            .map(|x| {
+                let y = x.unwrap().clone();
+                let z = y.clone();
+                (z, get_section(y))})
+            .collect::<Vec<(String, Instance)>>()
+            .into_iter()
+            .filter(|entry| {
+                && entry.0 != &&"Idle".to_string()
+                && entry.0 != "General"
+                && entry.0 != "defaults"
+                && process_exists(Some(&entry.1.exe_name))
+                && {
+                    (entry.1.game_or_win == "Game"
+                        && 
+                        (entry.1.priority.parse::<u32>().unwrap() > current_priority.parse::<u32>().unwrap()
+                        || entry.1.priority.parse::<u32>().unwrap() == current_priority.parse::<u32>().unwrap())
+                    )
+                    || (window_is_active(&entry.1.exe_name)
+                        && get_value(HKEY
+                            , gamemon_value(HKEY
+                                , "current_profile").to_owned()
+                                , "game_or_win"
+                            ) != "Game"
+                        )
+                }
+            }).map(|entry| entry).collect()
+        ;
+
+        return r
+    
+    }
+
+    pub fn ss_get(key_name: &'static str) -> String{
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         let desktop = hkcu.open_subkey("Control Panel\\Desktop").unwrap();
-        let screen_s: String = desktop.get_value(&key_name).unwrap();
+        let screen_s = desktop.get_value(&key_name).unwrap();
     
         return screen_s;
     }
     
-    pub fn get_value(hkey: &RegKey, section: String, key: String) -> String{
+    pub fn get_value<T, U>(hkey: &RegKey, section: T, key: U) -> String 
+        where T: ToString, U: ToString
+    {
+        let section = section.to_string();
+        let key = key.to_string();
         let hklm = hkey;
         let path = Path::new("Software").join("GameMon").join(section);
         let gamemon = hklm.open_subkey(&path).unwrap();
-        gamemon.get_value(key).unwrap()
+        let return_value = gamemon.get_value(key).unwrap();
+        return_value
     }
 
-    pub fn gamemon_value(hkey: &RegKey, key: String) -> String{
+    pub fn gamemon_value<T>(hkey: &RegKey, key: T) -> String where T: ToString {
+        let key = key.to_string();
         let hklm = hkey;
         let path = Path::new("Software").join("GameMon");
         let gamemon = hklm.open_subkey(&path).unwrap();
@@ -301,6 +390,46 @@ pub mod read {
                     },
                     Err(_) => {
                         log!(&format!("Could not write value \"General\" to {}\\current_profile", &ini_file), "e");
+                    },
+                };
+                match reg_write_value(&hkey, &path, "current_priority".to_string(), (&"0").to_string()) {
+                    Ok(_) => {
+                        log!(&format!("Wrote value \"0\" to {}\\current_priority", &ini_file));
+                    },
+                    Err(_) => {
+                        log!(&format!("Could not write value \"0\" to {}\\current_priority", &ini_file), "e");
+                    },
+                };
+                match reg_write_value(&hkey, &path, "last_profile".to_string(), (&"General").to_string()) {
+                    Ok(_) => {
+                        log!(&format!("Wrote value \"General\" to {}\\last_profile", &ini_file));
+                    },
+                    Err(_) => {
+                        log!(&format!("Could not write value \"General\" to {}\\last_profile", &ini_file), "e");
+                    },
+                };
+                match reg_write_value(&hkey, &path, "current_profile_activated".to_string(), (&"true").to_string()) {
+                    Ok(_) => {
+                        log!(&format!("Wrote value \"General\" to {}\\current_profile_activated", &ini_file));
+                    },
+                    Err(_) => {
+                        log!(&format!("Could not write value \"General\" to {}\\current_profile_activated", &ini_file), "e");
+                    },
+                };
+                match reg_write_value(&hkey, &path, "night".to_string(), (&"false").to_string()) {
+                    Ok(_) => {
+                        log!(&format!("Wrote value \"false\" to {}\\night", &ini_file));
+                    },
+                    Err(_) => {
+                        log!(&format!("Could not write value \"false\" to {}\\night", &ini_file), "e");
+                    },
+                };
+                match reg_write_value(&hkey, &path, "idle".to_string(), (&"false").to_string()) {
+                    Ok(_) => {
+                        log!(&format!("Wrote value \"false\" to {}\\idle", &ini_file));
+                    },
+                    Err(_) => {
+                        log!(&format!("Could not write value \"false\" to {}\\idle", &ini_file), "e");
                     },
                 };
                 match reg_write_value(&hkey, &path, "last_other_commands".to_string(), (&"General").to_string()) {
@@ -371,13 +500,13 @@ pub mod read {
                 let mut section_name = "General".to_string();
                 write_key(&hkey, &section_name, "OpenRGBprofile", "General");
                 write_key(&hkey, &section_name, "SignalRGBprofile", "General");
-                write_key(&hkey, &section_name, "game-or-win", "Game");
+                write_key(&hkey, &section_name, "game_or_win", "Game");
                 write_key(&hkey, &section_name, "priority", "0");
             
                 section_name = "Idle".to_string();
                 write_key(&hkey, &section_name, "exeName", "300");
                 write_key(&hkey, &section_name, "gameWindowName", "2100-0600");
-                write_key(&hkey, &section_name, "game-or-win", "Game");
+                write_key(&hkey, &section_name, "game_or_win", "Game");
                 write_key(&hkey, &section_name, "priority", "4");
             },
             RegDisposition::REG_OPENED_EXISTING_KEY => {
@@ -410,21 +539,69 @@ pub mod read {
         }.unwrap().as_secs();
 
         if idle_seconds.cmp(&(&wait_time)) == Ordering::Greater {
-            return true
+            let _v = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
+                , &Path::new("Software").join("GameMon")
+                , "idle".to_string()
+                , "true".to_string()
+            );
+            return true;
         } else {
-            return false
+            let _v = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
+                , &Path::new("Software").join("GameMon")
+                , "idle".to_string()
+                , "false".to_string()
+            );
+            return false;
         }
     }
+
+
+    // pub fn is_monitor_on() -> bool {
+    //     let mut monitor_on = false;
+    //     let mut monitor_info = MONITORINFO::default();
+    //     unsafe {
+    //         EnumDisplayMonitors(
+    //             std::ptr::null_mut(),
+    //             std::ptr::null_mut(),
+    //             Some(enum_monitor_callback),
+    //             &mut monitor_on as *mut bool as *mut _,
+    //         );
+    //     }
+    //     monitor_on
+    // }
+
+    
+
+    // unsafe extern "system" fn enum_monitor_callback(
+    //     hmonitor: std::ptr::NonNull<HMONITOR__>,
+    //     _hdc: std::ptr::NonNull<()>,
+    //     _lprect: *mut std::ffi::c_void,
+    //     lparam: std::ptr::NonNull<()>,
+    // ) -> i32 {
+    //     let mut monitor_info = MONITORINFO::default();
+    //     monitor_info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+    //     let pt = POINT { x: 0, y: 0 };
+    //     let dw_flags = MONITOR_DEFAULTTOPRIMARY;
+    //     if MonitorFromPoint(pt, dw_flags) == hmonitor.as_ptr()
+    //     {
+    //         let monitor_on_ptr = lparam.as_ptr() as *mut bool;
+    //         *monitor_on_ptr = 
+    //         !winapi::um::winuser::MONITORINFOF::from_bits(monitor_info.dwFlags)
+    //             .unwrap()
+    //             .contains(winapi::um::winuser::MONITORINFOF::MONITOR_OFF);
+    //     }
+    //     1
+    // }
 
 }
 
 pub mod write {
     use std::path::{Path, PathBuf};
-    use crate::ak_utils::macros::{
+    use crate::{ak_utils::{macros::{
         log
-    };
+    }, dark_hours}, ak_io::read::{user_idle, get_value}};
 
-    use winreg::{RegKey, enums::{RegDisposition::{REG_CREATED_NEW_KEY, REG_OPENED_EXISTING_KEY}}};
+    use winreg::{RegKey, enums::{RegDisposition::{REG_CREATED_NEW_KEY, REG_OPENED_EXISTING_KEY}, HKEY_LOCAL_MACHINE}};
 
 
     pub fn write_key(hkey: &RegKey, sec_name: &String, key_name: &'static str, key_value: &str){
@@ -468,24 +645,47 @@ pub mod write {
         write_key(&hkey, &"defaults".to_string(), "gameon", "False");
         write_key(&hkey, &"General".to_string(), "running", "True");
         write_key(&hkey, &"General".to_string(), "running_pid", "0");
-        let _v = reg_write_value(&hkey, &Path::new("Software").join("GameMon")
+        let _ = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE), &Path::new("Software").join("GameMon")
             , "current_profile".to_string()
             , "General".to_string());
+        let _ = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE), &Path::new("Software").join("GameMon")
+            , "current_profile_activated".to_string()
+            , "General".to_string());
+        let _ = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE), &Path::new("Software").join("GameMon")
+            , "last_profile".to_string()
+            , "General".to_string());
+        
+
+        let _u = user_idle(
+                get_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
+                , "Idle".to_string()
+                , "exe_name".to_string())
+                .parse::<u64>().unwrap()
+            );
+        
+        let _n = dark_hours(
+                    &get_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
+                    , "Idle".to_string()
+                    , "game_window_name".to_string())
+            );   
+        
         log!("Running values reset.".to_string(), "w");
     }
 
     pub fn write_section(hkey: &RegKey, sec_name: &String){
-        write_key(&hkey, sec_name, "exeName", "");
-        write_key(&hkey, sec_name, "gameWindowName", "");
-        write_key(&hkey, sec_name, "nameOfahk", "");
-        write_key(&hkey, sec_name, "pathToahk", "");
-        write_key(&hkey, sec_name, "OpenRGBprofile", "");
-        write_key(&hkey, sec_name, "voiceAttackProfile", "");
-        write_key(&hkey, sec_name, "SignalRGBprofile", "");
-        write_key(&hkey, sec_name, "game-or-win", "");
+        write_key(&hkey, sec_name, "exe_name", "");
+        write_key(&hkey, sec_name, "game_window_name", "");
+        write_key(&hkey, sec_name, "name_ofahk", "");
+        write_key(&hkey, sec_name, "path_toahk", "");
+        write_key(&hkey, sec_name, "open_rgbprofile", "");
+        write_key(&hkey, sec_name, "voice_attack_profile", "");
+        write_key(&hkey, sec_name, "signal_rgbprofile", "");
+        write_key(&hkey, sec_name, "game_or_win", "");
         write_key(&hkey, sec_name, "priority", "");
         write_key(&hkey, sec_name, "running", "");
         write_key(&hkey, sec_name, "running_pid", "");
+        write_key(&hkey, sec_name, "other_commands", "");
+
     }
 
     pub fn reg_write_value(hkey: &RegKey, path: &PathBuf, name: String, value: String) -> Result<(), std::io::Error> {

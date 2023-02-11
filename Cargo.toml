@@ -26,6 +26,9 @@ log = "*"
 eventlog = "*"
 mouse-rs = "0.4.2"
 msgbox = "0.7.0"
+crossbeam = "0.8.2"
+widestring = "1.0.2"
+winit = "0.28.1"
 
 [build-dependencies]
 windres = "*"
