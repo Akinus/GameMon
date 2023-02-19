@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 11 Feb 2023 @ 15:09:19                          #
+// Last Modified: Sun, 12 Feb 2023 @ 23:07:24                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -14,26 +14,25 @@
 
 use std::path::Path;
 
-
-use chrono::{NaiveTime};
-use winreg::RegKey;
+use chrono::NaiveTime;
 use winreg::enums::HKEY_LOCAL_MACHINE;
+use winreg::RegKey;
 
-use crate::ak_utils::macros::{exit_app};
+use crate::ak_io::write::reg_write_value;
 use crate::ak_run::close_all_ahk;
-use crate::ak_io::write::{reg_write_value};
+use crate::ak_utils::macros::exit_app;
 
 //   Import Data ####
-pub fn sleep(milliseconds: u64){
+pub fn sleep(milliseconds: u64) {
     let mills = std::time::Duration::from_millis(milliseconds);
     std::thread::sleep(mills);
 }
 
 pub fn dark_hours(time_range: &String) -> bool {
-    let start_hour= time_range[0..2].parse().unwrap();
-    let start_minute= time_range[2..4].parse().unwrap();
-    let end_hour= time_range[5..7].parse::<u32>().unwrap();
-    let end_minute= time_range[7..9].parse().unwrap();
+    let start_hour = time_range[0..2].parse().unwrap();
+    let start_minute = time_range[2..4].parse().unwrap();
+    let end_hour = time_range[5..7].parse::<u32>().unwrap();
+    let end_minute = time_range[7..9].parse().unwrap();
 
     let start_time = NaiveTime::from_hms(start_hour, start_minute, 0);
     let end_time = NaiveTime::from_hms(end_hour, end_minute, 0);
@@ -41,30 +40,30 @@ pub fn dark_hours(time_range: &String) -> bool {
     // Get the current time
     let current_time = chrono::Local::now().time();
 
-
     // Return true if the current hour and minute are within the specified range (inclusive)
-    if (start_hour > 12) &&  (end_hour < 12)
-    && ((current_time < start_time) && (current_time > end_time))
+    if (start_hour > 12)
+        && (end_hour < 12)
+        && ((current_time < start_time) && (current_time > end_time))
     {
-        let _v = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
-                , &Path::new("Software").join("GameMon")
-                , "night".to_string()
-                , "false".to_string()
+        let _v = reg_write_value(
+            &RegKey::predef(HKEY_LOCAL_MACHINE),
+            &Path::new("Software").join("GameMon"),
+            "night".to_string(),
+            "false".to_string(),
         );
-        return false
+        return false;
     } else {
-        let _v = reg_write_value(&RegKey::predef(HKEY_LOCAL_MACHINE)
-                , &Path::new("Software").join("GameMon")
-                , "night".to_string()
-                , "true".to_string()
+        let _v = reg_write_value(
+            &RegKey::predef(HKEY_LOCAL_MACHINE),
+            &Path::new("Software").join("GameMon"),
+            "night".to_string(),
+            "true".to_string(),
         );
-        return true
+        return true;
     }
 }
 
-
-
-pub fn url_encode(data: String) -> String{
+pub fn url_encode(data: String) -> String {
     let data = str::replace(&data, "\n", "%0A");
     let data = str::replace(&data, "+", "%2b");
     let data = str::replace(&data, "\r", "%0D");
@@ -96,155 +95,129 @@ impl Drop for Cleanup {
 pub mod macros {
 
     macro_rules! d_quote {
-        
         ($a:expr) => {
             quoted_string::strip_dquotes($a).unwrap().to_string()
-        }
+        };
     }
 
     macro_rules! exit_app {
-    
-        ($a:expr) => {
-            {
-                log!("Exiting.  Reason: Shutdown", "w");
-                log!(format!("{}", reset_running()), "w");
-                let all_close = close_all_ahk();
-                assert!(all_close.is_ok());
-                log!(format!("All ahk scripts are closed"), "w");
-    
-                write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
-    
-                eventlog::deregister("GameMon Log").unwrap();
-                
-                std::process::exit($a);
-            }
-        };
-    
-        ($b:expr) => {
-            {
-                log!(format!("Exiting. Reason: {}", $b), "w");
-                log!(format!("{}", reset_running()), "w");
-                let all_close = close_all_ahk();
-                assert!(all_close.is_ok());
-                log!(format!("All ahk scripts are closed"), "w");
-    
-                write_key(&"defaults".to_string(), "exit_reason", $b);
-    
-                eventlog::deregister("GameMon Log").unwrap();
-                std::process::abort();           
-            }
-        };
+        ($a:expr) => {{
+            let mut log_text = format!("Exiting.  Reason: Shutdown\n");
+            log_text.push_str(format!("{}\n", reset_running()));
+            let all_close = close_all_ahk();
+            assert!(all_close.is_ok());
+            log_text.push_str(format!("All ahk scripts are closed"));
+            write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
+            eventlog::deregister("GameMon Log").unwrap();
+            log!(log_text, "w");
+            std::process::exit($a);
+        }};
 
-        ($c:expr) => {
-            {
-                log!("Exiting.  Reason: Shutdown", "w");
-                for handle in $c {
-                    handle.join().unwrap();
-                }
-                log!(format!("{}", reset_running()), "w");
-                let all_close = close_all_ahk();
-                assert!(all_close.is_ok());
-                log!(format!("All ahk scripts are closed"), "w");
-    
-                write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
-    
-                eventlog::deregister("GameMon Log").unwrap();
-                
-                std::process::exit(0);         
-            }
-        };
-    
-        ($a:expr,$b:expr) => {
-            {
-                log!(format!("Exiting. Reason: {}", $b), "w");
-                let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-                let all_close = close_all_ahk();
-                assert!(all_close.is_ok());
-                log!(format!("All ahk scripts are closed"), "w");
-    
-                write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
-    
-                eventlog::deregister("GameMon Log").unwrap();
-                std::process::exit($a);
-            }
-        };
+        ($b:expr) => {{
+            let mut log_text = format!("Exiting. Reason: {}\n", $b);
+            log_text.push_str(format!("{}\n", reset_running()));
+            let all_close = close_all_ahk();
+            assert!(all_close.is_ok());
+            log_text.push_str(format!("All ahk scripts are closed\n"));
+            write_key(&"defaults".to_string(), "exit_reason", $b);
+            eventlog::deregister("GameMon Log").unwrap();
+            log!(log_text, "w");
+            std::process::abort();
+        }};
 
-        ($a:expr,$b:expr, $c:expr) => {
-            {
-                log!(format!("Exiting. Reason: {}", $b), "w");
-                let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-                for handle in $c {
-                    handle.join().unwrap();
-                }
-                let all_close = close_all_ahk();
-                assert!(all_close.is_ok());
-                log!(format!("All ahk scripts are closed"), "w");
-    
-                write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
-    
-                eventlog::deregister("GameMon Log").unwrap();
-                std::process::exit($a);
+        ($c:expr) => {{
+            let mut log_text = format!("Exiting.  Reason: Shutdown\n");
+            for handle in $c {
+                handle.join().unwrap();
             }
-        };
-        
-        () => {
-            {
-                let all_close = close_all_ahk();
-                assert!(all_close.is_ok());
-                eventlog::deregister("GameMon Log").unwrap();
-                std::process::abort();
+            log_text.push_str(format!("{}\n", reset_running()));
+            let all_close = close_all_ahk();
+            assert!(all_close.is_ok());
+            log_text.push_str(format!("All ahk scripts are closed\n"));
+            write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
+            eventlog::deregister("GameMon Log").unwrap();
+            log!(log_text, "w");
+            std::process::exit(0);
+        }};
+
+        ($a:expr,$b:expr) => {{
+            let mut log_text = format!("Exiting. Reason: {}\n", $b);
+            let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+            let all_close = close_all_ahk();
+            assert!(all_close.is_ok());
+            log_text.push_str(&format!("All ahk scripts are closed\n"));
+
+            write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
+
+            eventlog::deregister("GameMon Log").unwrap();
+            log!(log_text, "w");
+            std::process::exit($a);
+        }};
+
+        ($a:expr,$b:expr, $c:expr) => {{
+            let mut log_text = format!("Exiting. Reason: {}\n", $b);
+            let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+            for handle in $c {
+                handle.join().unwrap();
             }
-        };
+            let all_close = close_all_ahk();
+            assert!(all_close.is_ok());
+            log_text.push_str(format!("All ahk scripts are closed\n"));
+
+            write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
+
+            eventlog::deregister("GameMon Log").unwrap();
+            log!(log_text, "w");
+            std::process::exit($a);
+        }};
+
+        () => {{
+            let all_close = close_all_ahk();
+            assert!(all_close.is_ok());
+            eventlog::deregister("GameMon Log").unwrap();
+            std::process::abort();
+        }};
     }
 
-    
-macro_rules! log {
-    ($a:expr) => {
-        {
+    macro_rules! log {
+        ($a:expr) => {{
             log::info!("{}", $a);
             $a
-        }
-    };
+        }};
 
-    ($a:expr,$b:expr) => {
-        {
+        ($a:expr,$b:expr) => {{
             match $b {
                 "i" => {
                     log::info!("{}", $a);
                     $a
-                },
+                }
                 "d" => {
                     log::debug!("{}", $a);
-                    $a                   
-                },
+                    $a
+                }
                 "e" => {
                     log::error!("{}", $a);
-                    $a                    
-                },
+                    $a
+                }
                 "w" => {
                     log::warn!("{}", $a);
-                    $a                    
-                },
+                    $a
+                }
                 "t" => {
                     log::trace!("{}", $a);
-                    $a                    
-                },
+                    $a
+                }
                 _ => $a,
             }
-                   
-        }
-    };
+        }};
 
-    () => {
-        {
+        () => {{
             trace!("{}", "BREAK BREAK BREAK ----------------");
-            $a          
-        }
+            $a
+        }};
     }
-}
 
     pub(crate) use d_quote;
     pub(crate) use exit_app;
     pub(crate) use log;
-
 }

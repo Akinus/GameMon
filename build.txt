@@ -1,0 +1,12 @@
+@echo off
+
+TASKKILL /IM EventGhost.exe
+TASKKILL /IM Autostart.exe
+TASKKILL /FI "WINDOWTITLE eq RUST_WINSIG*"
+
+timeout /t 5
+
+cargo build --release
+move /Y .\target\release\GameMon.exe D:\OneDrive\Documents\Miscellaneous\Programs\GameMon
+
+start D:\OneDrive\Documents\Miscellaneous\Programs\Autostart\Autostart.exe
