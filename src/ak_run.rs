@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 19 Feb 2023 @ 9:30:22                           #
+// Last Modified: Sun, 19 Feb 2023 @ 13:20:05                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -15,42 +15,35 @@
 use std::{
     cmp::Ordering,
     os::windows::process::CommandExt,
-    path::{Path, PathBuf},
+    path::{Path},
     process::Command,
     sync::{Arc, Mutex},
 };
 
-use crossbeam::{
-    channel::{self, Receiver},
-    scope,
-};
 use mouse_rs::Mouse;
-use sysinfo::{Process, ProcessExt, RefreshKind, System, SystemExt};
+use sysinfo::{Process, ProcessExt, System, SystemExt};
 use ureq::Error;
 extern crate winapi;
 use winapi::{
-    shared::windef::HWND,
     um::{
         winbase::CREATE_NO_WINDOW,
-        winuser::{FindWindowA, GetForegroundWindow, SetForegroundWindow, WM_CLOSE},
+        winuser::{GetForegroundWindow, SetForegroundWindow, WM_CLOSE},
     },
 };
 
-use windows_win::raw::window::{get_by_class, get_by_pid, get_by_title, get_text, send_message};
+use windows_win::raw::window::{get_by_class, get_by_pid, send_message};
 use winreg::{enums::{HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}, RegKey};
 
 use crate::{
-    ak_gui::windows::{defaults_gui, main_gui, msg_box},
     ak_io::{
         read::{
-            filtered_keys, gamemon_value, get_idle, get_pid, get_section, get_value,
-            process_exists, ss_get, user_idle, window_is_active, Instance,
+            gamemon_value, get_pid, get_section, get_value, ss_get, user_idle, Instance,
         },
         write::{reg_write_value, write_key},
     },
     ak_utils::{
-        macros::{exit_app, log},
-        sleep, url_encode, Message, HKEY,
+        macros::{log},
+        sleep, url_encode, HKEY,
     },
 };
 
@@ -88,134 +81,132 @@ where
         )))),
     };
 
-    let _ = scope(|a| {
-        let handles = vec![
-            {
-                let oc = (sec.clone(), section.other_commands.as_str().clone());
-                let section = section.clone();
-                let sec = sec.clone();
-                let lt = log_text.clone();
-                a.spawn(move |_| {
-                    let mut log_text = lt.lock().unwrap();
-                    // Run all other commands
-                    log_text.push_str(&run_other_commands(oc));
-                    
-                    if sec == "Idle" {
-                        log_text.push_str("\n_____ Idle Special Settings _____\n");
-                        if section.game_window_name == "Night" {
-                            log_text.push_str(&format!("Idle detected during night hours.\n"));
-                            if gamemon_value(HKEY, "display") == "on" && user_idle()
-                            {
-                                log_text.push_str(&format!("Turning monitors off."));
-                                log_text.push_str(&power_monitors(false));
-                                log_text.push_str("\n");
-                            }
-                        } else {
-                            log_text.push_str(&format!("Idle detected during day hours.\n"));
-                            if gamemon_value(HKEY, "display") == "off" && user_idle()
-                            {
-                                log_text.push_str(&format!("Turning monitors on."));
-                                log_text.push_str(&power_monitors(true));
-                                log_text.push_str("\n");
-                            }
-
-                            if section.game_or_win == "Yes" && user_idle(){
-                                reg_write_value(
-                                    &RegKey::predef(HKEY_CURRENT_USER),
-                                    &Path::new("Control Panel").join("Desktop"),
-                                    "ScreenSaveActive".to_string(),
-                                    "0".to_string()).unwrap()
-                                ;
-                                log_text.push_str(&format!("Activating Screensaver...\n"));
-                                log_text.push_str(&run_screensaver());
-                                log_text.push_str("\n");
-                            }
+    
+    let handles = vec![
+        {
+            let oc = (sec.clone(), section.other_commands.clone());
+            let section = section.clone();
+            let sec = sec.clone();
+            let lt = log_text.clone();
+            std::thread::spawn(move || {
+                let mut log_text = lt.lock().unwrap();
+                // Run all other commands
+                log_text.push_str(&run_other_commands(oc));
+                
+                if sec == "Idle" {
+                    log_text.push_str("\n_____ Idle Special Settings _____\n");
+                    if section.game_window_name == "Night" {
+                        log_text.push_str(&format!("Idle detected during night hours.\n"));
+                        if gamemon_value(HKEY, "display") == "on" && user_idle()
+                        {
+                            log_text.push_str(&format!("Turning monitors off."));
+                            log_text.push_str(&power_monitors(false));
+                            log_text.push_str("\n");
                         }
-                        log_text.push_str("\n");
+                    } else {
+                        log_text.push_str(&format!("Idle detected during day hours.\n"));
+                        if gamemon_value(HKEY, "display") == "off" && user_idle()
+                        {
+                            log_text.push_str(&format!("Turning monitors on."));
+                            log_text.push_str(&power_monitors(true));
+                            log_text.push_str("\n");
+                        }
+
+                        if section.game_or_win == "Yes" && user_idle(){
+                            reg_write_value(
+                                &RegKey::predef(HKEY_CURRENT_USER),
+                                &Path::new("Control Panel").join("Desktop"),
+                                "ScreenSaveActive".to_string(),
+                                "0".to_string()).unwrap()
+                            ;
+                            log_text.push_str(&format!("Activating Screensaver...\n"));
+                            log_text.push_str(&run_screensaver());
+                            log_text.push_str("\n");
+                        }
                     }
-                    
-                })
-            },
-            {
-                let vap = section.voice_attack_profile.clone();
-                let lt = log_text.clone();
-                a.spawn(move |_| {
-                    let mut log_text = lt.lock().unwrap();
-                    log_text.push_str("\n_____ Voice Attack _____\n");
-                    log_text.push_str(&change_voice_attack(&vap));
-                    log_text.push_str("\n\n");
-                })
-            },
-            {
-                let ahk = section.path_toahk.clone();
-                let lt = log_text.clone();
-                a.spawn(move |_| {
-                    let mut log_text = lt.lock().unwrap();
-                    log_text.push_str("\n_____ Autohotkey Scripts _____\n");
-                    log_text.push_str(&run_ahk(&ahk));
-                    log_text.push_str("\n\n");
-                })
-            },
-            {
-                let op = section.open_rgbprofile.clone();
-                let lt = log_text.clone();
-                a.spawn(move |_| {
-                    let mut log_text = lt.lock().unwrap();
-                    log_text.push_str("\n_____ OpenRGB _____\n");
-                    log_text.push_str(&change_open_rgb(&op));
-                    log_text.push_str("\n\n");
-                })
-            },
-            {
-                let sp = section.signal_rgbprofile.clone();
-                let lt = log_text.clone();
-                a.spawn(move |_| {
-                    let mut log_text = lt.lock().unwrap();
-                    log_text.push_str("\n_____ SignalRGB _____\n");
-                    log_text.push_str(&change_signal_rgb(&sp));
-                    log_text.push_str("\n\n");
-                })
-            }
-        ];
-
-        for h in handles {
-            h.join().unwrap();
+                    log_text.push_str("\n");
+                }
+                
+            })
+        },
+        {
+            let vap = section.voice_attack_profile.clone();
+            let lt = log_text.clone();
+            std::thread::spawn(move || {
+                let mut log_text = lt.lock().unwrap();
+                log_text.push_str("\n_____ Voice Attack _____\n");
+                log_text.push_str(&change_voice_attack(&vap));
+                log_text.push_str("\n\n");
+            })
+        },
+        {
+            let ahk = section.path_toahk.clone();
+            let lt = log_text.clone();
+            std::thread::spawn(move || {
+                let mut log_text = lt.lock().unwrap();
+                log_text.push_str("\n_____ Autohotkey Scripts _____\n");
+                log_text.push_str(&run_ahk(&ahk));
+                log_text.push_str("\n\n");
+            })
+        },
+        {
+            let op = section.open_rgbprofile.clone();
+            let lt = log_text.clone();
+            std::thread::spawn(move || {
+                let mut log_text = lt.lock().unwrap();
+                log_text.push_str("\n_____ OpenRGB _____\n");
+                log_text.push_str(&change_open_rgb(&op));
+                log_text.push_str("\n\n");
+            })
+        },
+        {
+            let sp = section.signal_rgbprofile.clone();
+            let lt = log_text.clone();
+            std::thread::spawn(move || {
+                let mut log_text = lt.lock().unwrap();
+                log_text.push_str("\n_____ SignalRGB _____\n");
+                log_text.push_str(&change_signal_rgb(&sp));
+                log_text.push_str("\n\n");
+            })
         }
+    ];
 
-        let sec_clone = sec.clone();
-        let cp = section.priority.clone();
-        let lt = log_text.clone();
-        std::thread::spawn(move || {
+    for h in handles {
+        h.join().unwrap();
+    }
 
-            // Change current priority
-            let _p = reg_write_value(
-                &RegKey::predef(HKEY_LOCAL_MACHINE),
-                &Path::new("Software").join("GameMon"),
-                "current_priority".to_string(),
-                cp,
-            );
+    let sec_clone = sec.clone();
+    let cp = section.priority.clone();
+    std::thread::spawn(move || {
 
-            // change current profile
-            let _v = reg_write_value(
-                &RegKey::predef(HKEY_LOCAL_MACHINE),
-                &Path::new("Software").join("GameMon"),
-                "current_profile".to_string(),
-                sec_clone.clone(),
-            );
+        // Change current priority
+        let _p = reg_write_value(
+            &RegKey::predef(HKEY_LOCAL_MACHINE),
+            &Path::new("Software").join("GameMon"),
+            "current_priority".to_string(),
+            cp,
+        );
 
-            // change current profile activated
-            let _v = reg_write_value(
-                &RegKey::predef(HKEY_LOCAL_MACHINE),
-                &Path::new("Software").join("GameMon"),
-                "current_profile_activated".to_string(),
-                sec_clone.clone(),
-            );
-        }).join().unwrap();
-        
+        // change current profile
+        let _v = reg_write_value(
+            &RegKey::predef(HKEY_LOCAL_MACHINE),
+            &Path::new("Software").join("GameMon"),
+            "current_profile".to_string(),
+            sec_clone.clone(),
+        );
 
-        // Log
-        log!(format!("{}", log_text.lock().unwrap()));
-    });
+        // change current profile activated
+        let _v = reg_write_value(
+            &RegKey::predef(HKEY_LOCAL_MACHINE),
+            &Path::new("Software").join("GameMon"),
+            "current_profile_activated".to_string(),
+            sec_clone.clone(),
+        );
+    }).join().unwrap();
+    
+
+    // Log
+    log!(format!("{}", log_text.lock().unwrap()));
 }
 
 pub fn deactivate<T>(instruction: T) -> String
@@ -704,17 +695,13 @@ pub fn run_screensaver() -> String {
 
     if ss_exe.contains("Lively.scr") {
         output_str.push_str(&format!("Lively.scr is designated as the screensaver.  Running \"Livelycu.exe screensaver --show true\""));
-        'lively: for _ in 0..5 {
-            if !user_idle(){break 'lively};
-            sleep(1000);
-            let _ = Command::new("Livelycu.exe")
-                .arg("screensaver")
-                .arg("--show")
-                .arg("true")
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()
-            ;
-        }
+        let _ = Command::new("Livelycu.exe")
+            .arg("screensaver")
+            .arg("--show")
+            .arg("true")
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        ;
     } else {
         match get_pid(&ss_exe) {
             Ok(_) => {
@@ -785,9 +772,12 @@ pub fn run_screensaver() -> String {
     output_str
 }
 
-pub fn run_other_commands(section_and_commands: (String, &str)) -> String {
-    let section = section_and_commands.0;
-    let other_commands = section_and_commands.1;
+pub fn run_other_commands<T, U>(section_and_commands: (T, U)) -> String 
+    where T: ToString, U: ToString
+{
+
+    let section = section_and_commands.0.to_string();
+    let other_commands = section_and_commands.1.to_string();
 
     if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "last_other_commands") == section {
         return "".to_string();
@@ -855,48 +845,47 @@ pub fn run_other_commands(section_and_commands: (String, &str)) -> String {
         )))),
     };
     let cloned_log_text = log_text.clone();
-    let _ = scope(|a| {
-        'command_loop: for c in collection {
-            let new_sec = section.clone();
-            let lt = log_text.clone();
-            let newc = c.clone();
-            if new_sec == "Idle" {
-                if !user_idle() {
-                    let mut log_text = lt.lock().unwrap();
-                    log_text.push_str("User is no longer idle...");
-                    break 'command_loop;
-                }
-            };
-            a.spawn(move |_| {
+
+    'command_loop: for c in collection {
+        let new_sec = section.clone();
+        let lt = log_text.clone();
+        let newc = c.clone();
+        if new_sec == "Idle" {
+            if !user_idle() {
                 let mut log_text = lt.lock().unwrap();
-                let output = Command::new("cmd.exe")
-                    .creation_flags(CREATE_NO_WINDOW)
-                    .arg("/c")
-                    .raw_arg(&newc)
-                    .spawn();
-                log_text.push_str(&match output {
-                    Ok(mut o) => {
-                        let status = o.wait().unwrap().code().unwrap();
-                        match status{
-                            0 => format!("\n--------------------\n{}\nSUCCESS!\nstdin: {:?}\nstdout: {:?}\nstderr: {:?}\n"
-                                        , &newc
-                                        , o.stdin
-                                        , o.stdout
-                                        , o.stderr
-                                    ),
-                            _ => format!("\n--------------------\n{}\nERROR!\nstdin: {:?}\nstdout: {:?}\nstderr: {:?}\n"
-                                        , &newc
-                                        , o.stdin
-                                        , o.stdout
-                                        , o.stderr
-                                    ),
-                        }
-                    },
-                    Err(e) => format!("Could not run {}: {e}\n", &newc)
-                });
+                log_text.push_str("User is no longer idle...");
+                break 'command_loop;
+            }
+        };
+        std::thread::spawn(move || {
+            let mut log_text = lt.lock().unwrap();
+            let output = Command::new("cmd.exe")
+                .creation_flags(CREATE_NO_WINDOW)
+                .arg("/c")
+                .raw_arg(&newc)
+                .spawn();
+            log_text.push_str(&match output {
+                Ok(mut o) => {
+                    let status = o.wait().unwrap().code().unwrap();
+                    match status{
+                        0 => format!("\n--------------------\n{}\nSUCCESS!\nstdin: {:?}\nstdout: {:?}\nstderr: {:?}\n"
+                                    , &newc
+                                    , o.stdin
+                                    , o.stdout
+                                    , o.stderr
+                                ),
+                        _ => format!("\n--------------------\n{}\nERROR!\nstdin: {:?}\nstdout: {:?}\nstderr: {:?}\n"
+                                    , &newc
+                                    , o.stdin
+                                    , o.stdout
+                                    , o.stderr
+                                ),
+                    }
+                },
+                Err(e) => format!("Could not run {}: {e}\n", &newc)
             });
-        }
-    });
+        });
+    }
 
     let x = cloned_log_text.lock().unwrap().clone();
     x

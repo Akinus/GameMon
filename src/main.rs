@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 19 Feb 2023 @ 9:09:12                           #
+// Last Modified: Sun, 19 Feb 2023 @ 13:28:33                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -19,76 +19,85 @@
     //   not(feature = "console"),
     ),
     windows_subsystem = "windows",
-  )]
-use active_win_pos_rs::ActiveWindow;
-//   Import Data ####
-// extern crate winreg;
-use crossbeam::{channel, thread::scope};
-use sysinfo::{SystemExt, RefreshKind, ProcessRefreshKind, ProcessExt, Process};
-use winsafe::msg::wm::GetText;
-use {
-    tray_item::TrayItem,
-    winsafe::prelude::*,
-    winsafe::{co::MB, HWND},
-};
-
-use crate::{ak_gui::windows::msg_box, ak_io::read::window_is_active};
-
+)]
 mod ak_gui;
-mod ak_io;
 mod ak_run;
+mod ak_io;
 mod ak_utils;
-use {
-    ak_gui::windows::{defaults_gui, main_gui},
-    ak_io::{
-        logging::initialize_log,
-        read::reg_check,
-        write::{reset_running, write_key},
+  
+use crate::{ak_gui::windows::
+    {
+        msg_box,
+        main_gui,
+        defaults_gui
     },
-    ak_run::{close_all_ahk, run_cmd},
+    ak_io::{logging::initialize_log,
+        read::{filtered_keys,
+            gamemon_value,
+            get_idle,
+            get_section,
+            get_value,
+            Instance,
+            is_any_process_running,
+            reg_check,
+            user_idle
+        },
+        write::{write_key}
+    },
+    ak_run::{activate,
+        close_all_ahk,
+        run_cmd
+    },
     ak_utils::{
-        macros::{exit_app, log},
-        sleep, Cleanup, Message, HKEY,
+        macros::{
+            exit_app,
+            log
+        },
+        Cleanup,
+        HKEY,
+        Message,
+        sleep
     },
 };
-use crate::{
-    ak_io::read::{filtered_keys, get_idle, get_section, get_value, user_idle, Instance},
-    ak_run::{activate, deactivate},
-};
-use ak_io::read::{gamemon_value, get_pid, get_cmd_line};
-use crossbeam::channel::Receiver;
-use std::{path::{Path, PathBuf}, collections::HashSet, ptr};
-use std::ptr::null_mut;
-use winapi::{um::{winuser::{
-    DispatchMessageA, PeekMessageA, TranslateMessage, MSG, WM_CLOSE, WM_DESTROY, WM_ENDSESSION,
-    WM_QUIT, GetActiveWindow, GetWindowThreadProcessId,
-}, processthreadsapi::GetProcessId}, shared::minwindef::DWORD};
+use std::{path::{PathBuf}, sync::mpsc};
+use tray_item::TrayItem;
 use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
 use wintrap;
+use active_win_pos_rs::get_active_window;
 
 #[cfg(windows)]
 fn main() {
     // Initialize Setup
-
-    use std::{rc::Rc, sync::{Arc, Mutex}};
-
-    use active_win_pos_rs::get_active_window;
-
-    use crate::ak_io::read::is_any_process_running;
     reg_check(HKEY);
     initialize_log(HKEY);
     let _cleanup = Cleanup;
-    let (tx, rx) = channel::bounded(2);
-    let (exit_tx, exit_rx) = channel::bounded(2);
-    let (filter_tx, filter_rx) = channel::bounded(2);
-    let bexit_tx = exit_tx.clone();
+    let (tx, rx) = mpsc::channel();
+    let (filter_tx, filter_rx) = mpsc::channel();
 
     wintrap::trap(
-        &[wintrap::Signal::CloseWindow],
-        move |_signal| {
+        &[
+            wintrap::Signal::CloseWindow,
+            wintrap::Signal::CloseConsole,
+            wintrap::Signal::CtrlC,
+            wintrap::Signal::CtrlBreak
+        ],
+        move |signal| {
             // handle signal here
             // let _ = msg_box("", format!("Caught a signal: {:?}", signal), 1500);
-            bexit_tx.send(WM_CLOSE).unwrap();
+            match signal {
+                wintrap::Signal::CloseWindow => {
+                    exit_app!(1, "Window Messsage: WM_CLOSE");
+                }
+                wintrap::Signal::CloseConsole => {
+                    exit_app!(1, "Window Messsage: WM_QUIT");
+                }
+                wintrap::Signal::CtrlC => {
+                    exit_app!(1, "Window Messsage: WM_DESTROY");
+                }
+                wintrap::Signal::CtrlBreak => {
+                    exit_app!(1, "Window Messsage: WM_ENDSESSION");
+                }
+            }
         },
         || {
             // do work
@@ -170,14 +179,13 @@ fn main() {
                 let mut loop_window = get_active_window().unwrap().process_name;
                 let mut current_window;
 
-                let mut current_profile = gamemon_value(HKEY, "current_profile").to_owned();
+                let mut current_profile;
                 
-                let mut current_priority = gamemon_value(HKEY, "current_priority").to_owned();
                 let mut f_keys;
-                f_keys = filtered_keys(&mut enum_keys, &current_profile, &current_priority);
 
                 let mut count = 0;
                 let mut running = is_any_process_running(&game_check);
+                let mut change = Ok(());
     
                 loop {
 
@@ -201,38 +209,38 @@ fn main() {
                             if section.game_or_win == "Game" {game_check.push(section.exe_name.clone())};
                         }
                     }
+
+                    current_profile = gamemon_value(HKEY, "current_profile").to_owned();
                     
                     if user_idle() {
-                        if &current_profile != "Idle"
-                            && get_value(HKEY, &current_profile, "game_or_win") != "Game"
-                        {
+                        if &current_profile == "Idle" {
+                            continue;
+                        } else if get_value(HKEY, &current_profile, "game_or_win") != "Game" {
                             let idle = get_idle();
-                            ftx.send(("Idle".to_string(), idle)).unwrap();
+                            change = ftx.send(("Idle".to_string(), idle));
                         }
                         continue;
                     } else if &current_profile == "Idle" {
                         let general = get_section("General");
-                        ftx.send(("General".to_owned(), general)).unwrap();
+                        change = ftx.send(("General".to_owned(), general));
                     }
 
                     if count > 4 {
                         running = is_any_process_running(&game_check);
-                        current_priority = gamemon_value(HKEY, "current_priority").to_owned();
-                        current_profile = gamemon_value(HKEY, "current_profile").to_owned();
                     }
 
                     current_window = get_active_window().unwrap().process_name;
 
                     if running {
-                        f_keys = filtered_keys(&mut enum_keys, &current_profile, &current_priority);
+                        f_keys = filtered_keys(&mut enum_keys, &current_profile);
                         if f_keys.len() > 0 {
                             let sec = &f_keys.first().unwrap().0;
                             let section = f_keys.first().unwrap().1.clone();
-                            ftx.send((sec.to_string(), section)).unwrap();
+                            change = ftx.send((sec.to_string(), section));
                         } else {
                             if &current_profile != "General" {
                                 let general = get_section("General");
-                                ftx.send(("General".to_owned(), general)).unwrap();
+                                change = ftx.send(("General".to_owned(), general));
                             }
                         };
                         continue;
@@ -240,18 +248,25 @@ fn main() {
 
                     if current_window != loop_window {
                         loop_window = current_window;
-                        f_keys = filtered_keys(&mut enum_keys, &current_profile, &current_priority);
+                        f_keys = filtered_keys(&mut enum_keys, &current_profile);
                         if f_keys.len() > 0 {
                             let sec = &f_keys.first().unwrap().0;
                             let section = f_keys.first().unwrap().1.clone();
-                            ftx.send((sec.to_string(), section)).unwrap();
+                            change = ftx.send((sec.to_string(), section));
                         } else {
                             if &current_profile != "General" {
                                 let general = get_section("General");
-                                ftx.send(("General".to_owned(), general)).unwrap();
+                                change = ftx.send(("General".to_owned(), general));
                             }
                         };
                         
+                    }
+
+                    match change.clone() {
+                        Ok(_) => (),
+                        Err(send_error) => {
+                            let _ = msg_box("", &send_error.0.0, 1500);
+                        }
                     }
                     
                     sleep(250);
@@ -259,7 +274,7 @@ fn main() {
                 };
             });
 
-            let frx = filter_rx.clone();
+            let frx = filter_rx;
 
             std::thread::spawn(move ||{
                 loop {
@@ -276,49 +291,21 @@ fn main() {
                 // main_check();
                 match rx.try_recv() {
                     Ok(Message::Quit) => {
-                        exit_tx.send(1).unwrap();
+                        exit_app!(1, "Menu");
                     }
                     Ok(Message::Gui) => {
-                        scope(|s| {
-                            let edit = s.spawn(|_| main_gui());
+                            let edit = std::thread::spawn(move || main_gui());
                             edit.join().unwrap();
-                        }).unwrap();
                             
                     }
                     Ok(Message::Defaults) => {
-                        scope(|s| {
-                            s.spawn(|_| defaults_gui());
-                        })
-                        .unwrap();
+                            std::thread::spawn(move || defaults_gui());
                     }
                     Ok(Message::Logs) => {
                         let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
                     }
                     Err(_) => (),
                 };
-                
-                match exit_rx.try_recv() {
-                    Ok(0) => {
-                        exit_app!(0, "Memory allocation too high!!");
-                    }
-                    Ok(1) => {
-                        exit_app!(1, "Menu");
-                    }
-                    Ok(WM_CLOSE) => {
-                        exit_app!(1, "Window Messsage: WM_CLOSE");
-                    }
-                    Ok(WM_QUIT) => {
-                        exit_app!(1, "Window Messsage: WM_QUIT");
-                    }
-                    Ok(WM_DESTROY) => {
-                        exit_app!(1, "Window Messsage: WM_DESTROY");
-                    }
-                    Ok(WM_ENDSESSION) => {
-                        exit_app!(1, "Window Messsage: WM_ENDSESSION");
-                    }
-                    Ok(_) => (),
-                    Err(_) => (),
-                }
                 
                 sleep(1000);
             }
@@ -335,19 +322,19 @@ fn main() {
 //************************************************************ */
 // *********************** TESTS ****************************
 //************************************************************ */
-#[test]
-fn test(){
-    use winsafe;
-    use sysinfo::{Pid, PidExt, System, SystemExt, Process, ProcessExt};
-    let process_names: HashSet<String> = ["notepad.exe", "calc.exe"].iter().map(|s| s.to_string()).collect();
+// #[test]
+// fn test(){
+//     use winsafe;
+//     use sysinfo::{Pid, PidExt, System, SystemExt, Process, ProcessExt};
+//     let process_names: HashSet<String> = ["notepad.exe", "calc.exe"].iter().map(|s| s.to_string()).collect();
 
-    loop {
-        if window_is_active("Code.exe"){
-            let _ = msg_box("", "TRUE", 500);
-        } else {
-            continue;
-        }
+//     loop {
+//         if window_is_active("Code.exe"){
+//             let _ = msg_box("", "TRUE", 500);
+//         } else {
+//             continue;
+//         }
         
-        // std::thread::sleep(std::time::Duration::from_millis(500));
-    }
-}
+//         // std::thread::sleep(std::time::Duration::from_millis(500));
+//     }
+// }

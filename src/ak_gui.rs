@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:54:42                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sat, 18 Feb 2023 @ 10:29:53                          #
+// Last Modified: Sun, 19 Feb 2023 @ 13:20:27                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -22,7 +22,7 @@ pub mod windows {
 
     use msgbox;
     use native_dialog::FileDialog;
-    use winapi::um::winuser::{GetDesktopWindow, SetFocus, SetForegroundWindow, BM_CLICK};
+    use winapi::um::winuser::{GetDesktopWindow, SetForegroundWindow, BM_CLICK};
     use windows_win::raw::window::{get_by_title, send_message};
     use winreg::{
         enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
@@ -35,7 +35,7 @@ pub mod windows {
             user_Hwnd, GuiChildFocus, GuiEvents, GuiNativeControlEvents, GuiParent, GuiWindow,
             GuiWindowText,
         },
-        WString, POINT, SIZE,
+        WString,
     };
 
     use crate::{

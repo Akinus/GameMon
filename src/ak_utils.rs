@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 12 Feb 2023 @ 23:07:24                          #
+// Last Modified: Sun, 19 Feb 2023 @ 13:30:46                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -34,8 +34,8 @@ pub fn dark_hours(time_range: &String) -> bool {
     let end_hour = time_range[5..7].parse::<u32>().unwrap();
     let end_minute = time_range[7..9].parse().unwrap();
 
-    let start_time = NaiveTime::from_hms(start_hour, start_minute, 0);
-    let end_time = NaiveTime::from_hms(end_hour, end_minute, 0);
+    let start_time = NaiveTime::from_hms_opt(start_hour, start_minute, 0);
+    let end_time = NaiveTime::from_hms_opt(end_hour, end_minute, 0);
 
     // Get the current time
     let current_time = chrono::Local::now().time();
@@ -43,7 +43,7 @@ pub fn dark_hours(time_range: &String) -> bool {
     // Return true if the current hour and minute are within the specified range (inclusive)
     if (start_hour > 12)
         && (end_hour < 12)
-        && ((current_time < start_time) && (current_time > end_time))
+        && ((current_time < start_time.unwrap()) && (current_time > end_time.unwrap()))
     {
         let _v = reg_write_value(
             &RegKey::predef(HKEY_LOCAL_MACHINE),

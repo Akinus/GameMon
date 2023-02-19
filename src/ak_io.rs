@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 19 Feb 2023 @ 0:38:30                           #
+// Last Modified: Sun, 19 Feb 2023 @ 13:29:16                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -29,7 +29,7 @@ pub mod read {
             dark_hours,
             macros::{d_quote, log},
             HKEY,
-        }, ak_gui::windows::msg_box,
+        },
     };
 
     pub fn get_pid<T>(pname: T) -> Result<u32, String>
@@ -64,37 +64,37 @@ pub mod read {
         return r;
     }
 
-    pub fn get_cmd_line<T>(pname: T) -> Result<String, String>
-    where
-        T: ToString,
-    {
-        let pname = pname.to_string();
-        let mut cmds = Vec::new();
+    // pub fn get_cmd_line<T>(pname: T) -> Result<String, String>
+    // where
+    //     T: ToString,
+    // {
+    //     let pname = pname.to_string();
+    //     let mut cmds = Vec::new();
 
-        if pname == "" {
-            return Err("No PID provided!".to_string());
-        };
+    //     if pname == "" {
+    //         return Err("No PID provided!".to_string());
+    //     };
 
-        let mut s = System::new();
-        s.refresh_processes();
-        let procs = s.processes_by_exact_name(&pname);
+    //     let mut s = System::new();
+    //     s.refresh_processes();
+    //     let procs = s.processes_by_exact_name(&pname);
 
-        for process in procs {
-            let ox = process.parent().unwrap().to_string();
-            if ox == "0" {
-                continue;
-            } else {
-                cmds.push(ox);
-            }
-        }
+    //     for process in procs {
+    //         let ox = process.parent().unwrap().to_string();
+    //         if ox == "0" {
+    //             continue;
+    //         } else {
+    //             cmds.push(ox);
+    //         }
+    //     }
 
-        let r = match cmds.is_empty() {
-            true => Err("Program Not Found!".to_string()),
-            false => Ok(cmds.last().unwrap().to_owned()),
-        };
+    //     let r = match cmds.is_empty() {
+    //         true => Err("Program Not Found!".to_string()),
+    //         false => Ok(cmds.last().unwrap().to_owned()),
+    //     };
 
-        return r;
-    }
+    //     return r;
+    // }
 
     pub fn process_exists<T>(pname: T) -> bool where T: ToString {
         
@@ -348,14 +348,12 @@ pub mod read {
         return section;
     }
 
-    pub fn filtered_keys<T, P>(
+    pub fn filtered_keys<T>(
         enum_keys: &mut Vec<(String, Instance)>,
-        current_profile: T,
-        current_priority: P,
+        current_priority: T
     ) -> Vec<(String, Instance)>
     where
-        T: ToString,
-        P: ToString,
+        T: ToString
     {
         let current_priority = current_priority.to_string().parse::<u32>().unwrap();
         enum_keys
@@ -730,7 +728,7 @@ pub mod read {
 pub mod write {
     use crate::{
         ak_io::read::{get_value, user_idle},
-        ak_utils::{dark_hours, macros::log, HKEY},
+        ak_utils::{dark_hours, macros::log},
     };
     use std::path::{Path, PathBuf};
 
