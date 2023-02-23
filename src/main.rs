@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 19 Feb 2023 @ 13:28:33                          #
+// Last Modified: Tue, 21 Feb 2023 @ 23:46:20                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -68,11 +68,22 @@ use active_win_pos_rs::get_active_window;
 #[cfg(windows)]
 fn main() {
     // Initialize Setup
+
+    use std::panic;
+
+    use winapi::um::{winuser::GetDesktopWindow, winnt::ProcessorCap};
+
     reg_check(HKEY);
     initialize_log(HKEY);
     let _cleanup = Cleanup;
     let (tx, rx) = mpsc::channel();
     let (filter_tx, filter_rx) = mpsc::channel();
+    let (confirm_tx, confirm_rx) = mpsc::channel();
+    let (refresh_tx, refresh_rx) = mpsc::channel();
+    panic::set_hook(Box::new(|panic_info| {
+        // Handle the panic here
+        exit_app!(1, format!("{:?}", panic_info));
+    }));
 
     wintrap::trap(
         &[
@@ -171,26 +182,41 @@ fn main() {
                 let mut exe_check = Vec::new();
                 let mut game_check = Vec::new();
 
-                for (_, section) in &enum_keys {
+                for (sec, section) in &enum_keys {
                     exe_check.push(section.exe_name.clone());
-                    if section.game_or_win == "Game" {game_check.push(section.exe_name.clone())};
+                    if section.game_or_win == "Game" {game_check.push((section.exe_name.clone(), sec.clone()))};
                 }
 
                 let mut loop_window = get_active_window().unwrap().process_name;
-                let mut current_window;
+                let mut current_window = unsafe { format!("{:?}", GetDesktopWindow()) };
 
-                let mut current_profile;
+                let mut current_profile = gamemon_value(HKEY, "current_profile").to_owned();
+                
+                let mut current_priority;
                 
                 let mut f_keys;
 
-                let mut count = 0;
+                let mut process_count = -1;
                 let mut running = is_any_process_running(&game_check);
-                let mut change = Ok(());
+                let mut change = ftx.send((current_profile.clone(), get_section(current_profile.clone())));
     
                 loop {
+                    sleep(250);
+                    process_count += 1;
+                    match change.clone() {
+                        Ok(_) => (),
+                        Err(send_error) => {
+                            let _ = msg_box("", &send_error.0.0, 1500);
+                        }
+                    }
 
-                    if count > 500 {
-                        enum_keys = RegKey::predef(HKEY_LOCAL_MACHINE)
+                    match refresh_rx.try_recv(){
+                        Ok(_) => {
+                            enum_keys.clear();
+                            exe_check.clear();
+                            game_check.clear();
+                            
+                            enum_keys = RegKey::predef(HKEY_LOCAL_MACHINE)
                             .open_subkey(&PathBuf::from("Software").join("GameMon"))
                             .unwrap()
                             .enum_keys()
@@ -204,89 +230,97 @@ fn main() {
                             })
                             .collect::<Vec<(String, Instance)>>();
 
-                        for (_, section) in &enum_keys {
-                            exe_check.push(section.exe_name.clone());
-                            if section.game_or_win == "Game" {game_check.push(section.exe_name.clone())};
-                        }
-                    }
+                            for (sec, section) in &enum_keys {
+                                exe_check.push(section.exe_name.clone());
+                                if section.game_or_win == "Game" {game_check.push((section.exe_name.clone(), sec.clone()))};
+                            }
+                        },
+                        _ => ()
+                    };
 
                     current_profile = gamemon_value(HKEY, "current_profile").to_owned();
-                    
+
                     if user_idle() {
                         if &current_profile == "Idle" {
+                            if gamemon_value(HKEY, "night") == "true" && gamemon_value(HKEY, "display") == "on"{
+                                let idle = get_idle();
+                                change = ftx.send(("Idle".to_string(), idle));
+                                confirm_rx.recv().unwrap();
+                            } else if gamemon_value(HKEY, "night") == "false" && gamemon_value(HKEY, "display") == "off" {
+                                let idle = get_idle();
+                                change = ftx.send(("Idle".to_string(), idle));
+                                confirm_rx.recv().unwrap();
+                            }
                             continue;
                         } else if get_value(HKEY, &current_profile, "game_or_win") != "Game" {
                             let idle = get_idle();
                             change = ftx.send(("Idle".to_string(), idle));
+                            confirm_rx.recv().unwrap();
                         }
                         continue;
-                    } else if &current_profile == "Idle" {
-                        let general = get_section("General");
-                        change = ftx.send(("General".to_owned(), general));
-                    }
-
-                    if count > 4 {
+                    } 
+                    
+                    if process_count > 4 {
                         running = is_any_process_running(&game_check);
+                        process_count = 0;
                     }
+                    current_priority = gamemon_value(HKEY, "current_priority").to_owned();
 
-                    current_window = get_active_window().unwrap().process_name;
-
-                    if running {
-                        f_keys = filtered_keys(&mut enum_keys, &current_profile);
-                        if f_keys.len() > 0 {
-                            let sec = &f_keys.first().unwrap().0;
-                            let section = f_keys.first().unwrap().1.clone();
-                            change = ftx.send((sec.to_string(), section));
-                        } else {
-                            if &current_profile != "General" {
-                                let general = get_section("General");
-                                change = ftx.send(("General".to_owned(), general));
-                            }
-                        };
+                    if running.0 {
+                        if running.1 != current_profile {
+                            f_keys = filtered_keys(&mut enum_keys, &current_priority);
+                            if f_keys.len() > 0 {
+                                let sec = &f_keys.first().unwrap().0;
+                                let section = f_keys.first().unwrap().1.clone();
+                                change = ftx.send((sec.to_string(), section));
+                                confirm_rx.recv().unwrap();
+                            } else {
+                                if &current_profile != "General" {
+                                    let general = get_section("General");
+                                    change = ftx.send(("General".to_owned(), general));
+                                    confirm_rx.recv().unwrap();
+                                }
+                            };
+                        }
                         continue;
                     }
 
                     if current_window != loop_window {
-                        loop_window = current_window;
-                        f_keys = filtered_keys(&mut enum_keys, &current_profile);
+                        loop_window = current_window.clone();
+                        f_keys = filtered_keys(&mut enum_keys, &current_priority);
                         if f_keys.len() > 0 {
                             let sec = &f_keys.first().unwrap().0;
                             let section = f_keys.first().unwrap().1.clone();
                             change = ftx.send((sec.to_string(), section));
+                            confirm_rx.recv().unwrap();
                         } else {
                             if &current_profile != "General" {
                                 let general = get_section("General");
                                 change = ftx.send(("General".to_owned(), general));
+                                confirm_rx.recv().unwrap();
                             }
                         };
-                        
                     }
-
-                    match change.clone() {
-                        Ok(_) => (),
-                        Err(send_error) => {
-                            let _ = msg_box("", &send_error.0.0, 1500);
-                        }
-                    }
-                    
-                    sleep(250);
-                    count += 1;
+                    current_window = match get_active_window(){
+                        Ok(window) => window.process_name,
+                        Err(_) => loop_window.clone()
+                    };
                 };
             });
-
-            let frx = filter_rx;
-
+            let ctx = confirm_tx.clone();
             std::thread::spawn(move ||{
                 loop {
-                    match frx.recv() {
+                    match filter_rx.recv() {
                         Ok((sec, section)) => {
                             activate((sec, section));
+                            ctx.send(1).unwrap();
+                            while let Ok(_) = filter_rx.try_recv() {};
                         },
                         _ => ()
                     };
                 };
             });
-
+            let mut count = 0;
             loop {
                 // main_check();
                 match rx.try_recv() {
@@ -294,12 +328,12 @@ fn main() {
                         exit_app!(1, "Menu");
                     }
                     Ok(Message::Gui) => {
-                            let edit = std::thread::spawn(move || main_gui());
-                            edit.join().unwrap();
-                            
+                            main_gui();
+                            refresh_tx.send(1).unwrap();
                     }
                     Ok(Message::Defaults) => {
-                            std::thread::spawn(move || defaults_gui());
+                            defaults_gui();
+                            refresh_tx.send(1).unwrap();
                     }
                     Ok(Message::Logs) => {
                         let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
@@ -307,6 +341,11 @@ fn main() {
                     Err(_) => (),
                 };
                 
+                if count > 59 {
+                    refresh_tx.send(1).unwrap();
+                    count = 0;
+                }
+                count += 1;
                 sleep(1000);
             }
         },

@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 19 Feb 2023 @ 13:20:05                          #
+// Last Modified: Wed, 22 Feb 2023 @ 8:26:24                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -20,14 +20,21 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use mouse_rs::Mouse;
 use sysinfo::{Process, ProcessExt, System, SystemExt};
 use ureq::Error;
 extern crate winapi;
 use winapi::{
     um::{
         winbase::CREATE_NO_WINDOW,
-        winuser::{GetForegroundWindow, SetForegroundWindow, WM_CLOSE},
+        winuser::{
+            GetForegroundWindow,
+            SetForegroundWindow,
+            WM_CLOSE,
+            SendMessageW,
+            HWND_BROADCAST,
+            WM_SYSCOMMAND,
+            SC_MONITORPOWER            
+        },
     },
 };
 
@@ -99,17 +106,13 @@ where
                         log_text.push_str(&format!("Idle detected during night hours.\n"));
                         if gamemon_value(HKEY, "display") == "on" && user_idle()
                         {
-                            log_text.push_str(&format!("Turning monitors off."));
-                            log_text.push_str(&power_monitors(false));
-                            log_text.push_str("\n");
+                            log_text.push_str(&format!("Turning monitors off.{}\n", &power_monitors(false)));
                         }
                     } else {
                         log_text.push_str(&format!("Idle detected during day hours.\n"));
                         if gamemon_value(HKEY, "display") == "off" && user_idle()
                         {
-                            log_text.push_str(&format!("Turning monitors on."));
-                            log_text.push_str(&power_monitors(true));
-                            log_text.push_str("\n");
+                            log_text.push_str(&format!("Turning monitors on.{}\n", &power_monitors(true)));
                         }
 
                         if section.game_or_win == "Yes" && user_idle(){
@@ -642,33 +645,31 @@ pub fn power_monitors(on_off: bool) -> String {
 
     if on_off {
         //Turn on display
-        if gamemon_value(HKEY, "display") == "on"{
-            return_string.push_str("..OK");
-            return return_string;
-        }
-        if gamemon_value(HKEY, "display") == "off"{
-            let mouse = Mouse::new();
-            mouse.move_to(0, 0).unwrap();
-            mouse.scroll(5).unwrap();
-            reg_write_value(
-                &RegKey::predef(HKEY_LOCAL_MACHINE),
-                &Path::new("Software").join("GameMon"),
-                "display".to_string(),
-                "on".to_string(),
-            )
-            .unwrap();
-        };
-        return_string.push_str("..OK");
-    } else {
-        //Turn off display
-        if gamemon_value(HKEY, "display") == "off"{
-            return_string.push_str("..OK");
-            return return_string;
-        }
         return_string.push_str(&match send_message(
             get_by_class("Progman", None).unwrap()[0],
-            0x112,
-            0xF170,
+            WM_SYSCOMMAND,
+            SC_MONITORPOWER,
+            -1,
+            Some(5),
+        ) {
+            Ok(_) => {
+                reg_write_value(
+                    &RegKey::predef(HKEY_LOCAL_MACHINE),
+                    &Path::new("Software").join("GameMon"),
+                    "display".to_string(),
+                    "on".to_string(),
+                )
+                .unwrap();
+                String::from("..OK")
+            }
+            Err(e) => format!("Failed to turn on monitor(s)!! || Error: {}", &e),
+        });
+    } else {
+        //Turn off display
+        return_string.push_str(&match send_message(
+            get_by_class("Progman", None).unwrap()[0],
+            WM_SYSCOMMAND,
+            SC_MONITORPOWER,
             2,
             Some(5),
         ) {

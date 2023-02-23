@@ -5,14 +5,14 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 19 Feb 2023 @ 13:30:46                          #
+// Last Modified: Mon, 20 Feb 2023 @ 8:15:05                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
 // ----------	---	-------------------------------------------------- #
 // #####################################################################
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::NaiveTime;
 use winreg::enums::HKEY_LOCAL_MACHINE;
@@ -104,12 +104,18 @@ pub mod macros {
         ($a:expr) => {{
             let mut log_text = format!("Exiting.  Reason: Shutdown\n");
             log_text.push_str(format!("{}\n", reset_running()));
+
             let all_close = close_all_ahk();
             assert!(all_close.is_ok());
             log_text.push_str(format!("All ahk scripts are closed"));
-            write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
+
+            let mut path = Path::new("Software").join("GameMon");
+            reg_write_value(HKEY, &path, "exit_reason", "Shutdown");
+
             eventlog::deregister("GameMon Log").unwrap();
+
             log!(log_text, "w");
+
             std::process::exit($a);
         }};
 
@@ -119,7 +125,8 @@ pub mod macros {
             let all_close = close_all_ahk();
             assert!(all_close.is_ok());
             log_text.push_str(format!("All ahk scripts are closed\n"));
-            write_key(&"defaults".to_string(), "exit_reason", $b);
+            let mut path = Path::new("Software").join("GameMon");
+            reg_write_value(HKEY, &path, "exit_reason", $b);
             eventlog::deregister("GameMon Log").unwrap();
             log!(log_text, "w");
             std::process::abort();
@@ -134,7 +141,8 @@ pub mod macros {
             let all_close = close_all_ahk();
             assert!(all_close.is_ok());
             log_text.push_str(format!("All ahk scripts are closed\n"));
-            write_key(&"defaults".to_string(), "exit_reason", "Shutdown");
+            let mut path = Path::new("Software").join("GameMon");
+            reg_write_value(HKEY, &path, "exit_reason", "Shutdown");
             eventlog::deregister("GameMon Log").unwrap();
             log!(log_text, "w");
             std::process::exit(0);
@@ -142,12 +150,12 @@ pub mod macros {
 
         ($a:expr,$b:expr) => {{
             let mut log_text = format!("Exiting. Reason: {}\n", $b);
-            let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
             let all_close = close_all_ahk();
             assert!(all_close.is_ok());
             log_text.push_str(&format!("All ahk scripts are closed\n"));
 
-            write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
+            let path = std::path::Path::new("Software").join("GameMon");
+            crate::ak_io::write::reg_write_value(HKEY, &path, "exit_reason", $b).unwrap();
 
             eventlog::deregister("GameMon Log").unwrap();
             log!(log_text, "w");
@@ -156,7 +164,6 @@ pub mod macros {
 
         ($a:expr,$b:expr, $c:expr) => {{
             let mut log_text = format!("Exiting. Reason: {}\n", $b);
-            let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
             for handle in $c {
                 handle.join().unwrap();
             }
@@ -164,7 +171,8 @@ pub mod macros {
             assert!(all_close.is_ok());
             log_text.push_str(format!("All ahk scripts are closed\n"));
 
-            write_key(&hklm, &"defaults".to_string(), "exit_reason", $b);
+            let mut path = Path::new("Software").join("GameMon");
+            reg_write_value(HKEY, &path, "exit_reason", $b);
 
             eventlog::deregister("GameMon Log").unwrap();
             log!(log_text, "w");

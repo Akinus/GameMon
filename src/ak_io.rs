@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 19 Feb 2023 @ 13:29:16                          #
+// Last Modified: Mon, 20 Feb 2023 @ 8:18:47                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -106,15 +106,18 @@ pub mod read {
         return r;
     }
 
-    pub fn is_any_process_running(exe_check: &Vec<String>) -> bool {
-        let mut r = false;
+    pub fn is_any_process_running<T, U>(exe_check: &Vec<(T, U)>) -> (bool, String)
+    where T: ToString, U: ToString
+    {
+
+        let mut r = (false, "None".to_string());
         let mut s = sysinfo::System::new();
         s.refresh_processes();
         let x = s.processes().iter().map(|p| p.1.name().to_string()).collect::<Vec<String>>();
 
-        for v in exe_check{
-            if x.contains(&v){
-                r = true;
+        for (exe_name, sec) in exe_check{
+            if x.contains(&exe_name.to_string()){
+                r = (true, sec.to_string());
             }
         }
         return r
@@ -429,15 +432,15 @@ pub mod read {
                 ) {
                     Ok(_) => {
                         log!(&format!(
-                            "Wrote value {:?} to {}\\InstallDir",
-                            &path, &ini_file
+                            "Wrote value {} to {:?}\\InstallDir",
+                            &ini_file, &path
                         ));
                     }
                     Err(_) => {
                         log!(
                             &format!(
-                                "Could not write value {:?} to {}\\InstallDir",
-                                &path, &ini_file
+                                "Could not write value {} to {:?}\\InstallDir",
+                                &ini_file, &path
                             ),
                             "e"
                         );
@@ -446,15 +449,32 @@ pub mod read {
                 match reg_write_value(&hkey, &path, "display".to_string(), (&"on").to_string()) {
                     Ok(_) => {
                         log!(&format!(
-                            "Wrote value {:?} to {}\\display",
-                            &path, &ini_file
+                            "Wrote value \"on\" to {:?}\\display",
+                            &path
                         ));
                     }
                     Err(_) => {
                         log!(
                             &format!(
-                                "Could not write value {:?} to {}\\display",
-                                &path, &ini_file
+                                "Could not write value \"on\" to {:?}\\display",
+                                &path
+                            ),
+                            "e"
+                        );
+                    }
+                };
+                match reg_write_value(&hkey, &path, "exit_reason".to_string(), (&"default").to_string()) {
+                    Ok(_) => {
+                        log!(&format!(
+                            "Wrote value \"default\" to {:?}\\exit_reason",
+                            &path
+                        ));
+                    }
+                    Err(_) => {
+                        log!(
+                            &format!(
+                                "Could not write value \"default\" to {:?}\\exit_reason",
+                                &path
                             ),
                             "e"
                         );
@@ -468,15 +488,15 @@ pub mod read {
                 ) {
                     Ok(_) => {
                         log!(&format!(
-                            "Wrote value \"General\" to {}\\current_profile",
-                            &ini_file
+                            "Wrote value \"General\" to {:?}\\current_profile",
+                            &path
                         ));
                     }
                     Err(_) => {
                         log!(
                             &format!(
-                                "Could not write value \"General\" to {}\\current_profile",
-                                &ini_file
+                                "Could not write value \"General\" to {:?}\\current_profile",
+                                &path
                             ),
                             "e"
                         );
@@ -490,15 +510,15 @@ pub mod read {
                 ) {
                     Ok(_) => {
                         log!(&format!(
-                            "Wrote value \"0\" to {}\\current_priority",
-                            &ini_file
+                            "Wrote value \"0\" to {:?}\\current_priority",
+                            &path
                         ));
                     }
                     Err(_) => {
                         log!(
                             &format!(
-                                "Could not write value \"0\" to {}\\current_priority",
-                                &ini_file
+                                "Could not write value \"0\" to {:?}\\current_priority",
+                                &path
                             ),
                             "e"
                         );
@@ -512,15 +532,15 @@ pub mod read {
                 ) {
                     Ok(_) => {
                         log!(&format!(
-                            "Wrote value \"General\" to {}\\last_profile",
-                            &ini_file
+                            "Wrote value \"General\" to {:?}\\last_profile",
+                            &path
                         ));
                     }
                     Err(_) => {
                         log!(
                             &format!(
-                                "Could not write value \"General\" to {}\\last_profile",
-                                &ini_file
+                                "Could not write value \"General\" to {:?}\\last_profile",
+                                &path
                             ),
                             "e"
                         );
@@ -534,32 +554,32 @@ pub mod read {
                 ) {
                     Ok(_) => {
                         log!(&format!(
-                            "Wrote value \"General\" to {}\\current_profile_activated",
-                            &ini_file
+                            "Wrote value \"General\" to {:?}\\current_profile_activated",
+                            &path
                         ));
                     }
                     Err(_) => {
-                        log!(&format!("Could not write value \"General\" to {}\\current_profile_activated", &ini_file), "e");
+                        log!(&format!("Could not write value \"General\" to {:?}\\current_profile_activated", &path), "e");
                     }
                 };
                 match reg_write_value(&hkey, &path, "night".to_string(), (&"false").to_string()) {
                     Ok(_) => {
-                        log!(&format!("Wrote value \"false\" to {}\\night", &ini_file));
+                        log!(&format!("Wrote value \"false\" to {:?}\\night", &path));
                     }
                     Err(_) => {
                         log!(
-                            &format!("Could not write value \"false\" to {}\\night", &ini_file),
+                            &format!("Could not write value \"false\" to {:?}\\night", &path),
                             "e"
                         );
                     }
                 };
                 match reg_write_value(&hkey, &path, "idle".to_string(), (&"false").to_string()) {
                     Ok(_) => {
-                        log!(&format!("Wrote value \"false\" to {}\\idle", &ini_file));
+                        log!(&format!("Wrote value \"false\" to {:?}\\idle", &path));
                     }
                     Err(_) => {
                         log!(
-                            &format!("Could not write value \"false\" to {}\\idle", &ini_file),
+                            &format!("Could not write value \"false\" to {:?}\\idle", &path),
                             "e"
                         );
                     }
@@ -572,15 +592,15 @@ pub mod read {
                 ) {
                     Ok(_) => {
                         log!(&format!(
-                            "Wrote value \"General\" to {}\\last_other_commands",
-                            &ini_file
+                            "Wrote value \"General\" to {:?}\\last_other_commands",
+                            &path
                         ));
                     }
                     Err(_) => {
                         log!(
                             &format!(
-                                "Could not write value \"General\" to {}\\last_other_commands",
-                                &ini_file
+                                "Could not write value \"General\" to {:?}\\last_other_commands",
+                                &path
                             ),
                             "e"
                         );
@@ -820,12 +840,14 @@ pub mod write {
         write_key(&hkey, sec_name, "other_commands", "");
     }
 
-    pub fn reg_write_value(
+    pub fn reg_write_value<T, U>(
         hkey: &RegKey,
         path: &PathBuf,
-        name: String,
-        value: String,
-    ) -> Result<(), std::io::Error> {
+        name: T,
+        value: U,
+    ) -> Result<(), std::io::Error> where T: ToString, U: ToString {
+        let name = name.to_string();
+        let value = value.to_string();
         let hklm = hkey;
         let key = hklm.create_subkey(&path).unwrap().0;
 
@@ -869,8 +891,12 @@ pub mod write {
 }
 
 pub mod logging {
-    use crate::{ak_io::read::get_value, ak_utils::macros::log};
+    use std::path::Path;
+
+    use crate::{ak_io::read::get_value, ak_utils::{macros::log, HKEY}};
     use winreg::RegKey;
+
+    use super::{read::gamemon_value, write::reg_write_value};
 
     pub fn initialize_log(hkey: &RegKey) {
         eventlog::register("GameMon Log").unwrap();
@@ -945,9 +971,9 @@ pub mod logging {
             }
         };
 
-        let last_error = std::io::Error::last_os_error().to_string();
+        let last_error = gamemon_value(HKEY, "exit_reason");
 
-        if last_error.contains("GameMon") {
+        if last_error == "default".to_owned() {
             log!(
                 format!("GameMon Started...\nLast shutdown reason: CRASH"),
                 "e"
@@ -961,5 +987,9 @@ pub mod logging {
                 "w"
             );
         }
+
+        let path = Path::new("Software").join("GameMon");
+        reg_write_value(HKEY, &path, "exit_reason", "default").unwrap();
+
     }
 }

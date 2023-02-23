@@ -3,7 +3,8 @@ script = [
     "TASKKILL /F /IM EventGhost.exe",
     "TASKKILL /F /IM Autostart.exe",
     "TASKKILL /FI \"WINDOWTITLE eq rust_systray_window\"",
-    "TASKKILL /FI \"WINDOWTITLE eq RUST_WINSIG*\""
+    "TASKKILL /FI \"WINDOWTITLE eq RUST_WINSIG*\"",
+    "timeout /T 8"
 ]
 
 [tasks.clean]
