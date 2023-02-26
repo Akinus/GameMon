@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 26 Feb 2023 @ 6:47:25                           #
+// Last Modified: Sun, 26 Feb 2023 @ 8:29:25                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -20,8 +20,6 @@
     ),
     windows_subsystem = "windows",
 )]
-
-use ak_gui::windows::CodeExample;
 
 mod ak_gui;
 mod ak_run;
@@ -47,8 +45,7 @@ fn main() {
                 is_any_process_running,
                 reg_check,
                 user_idle
-            },
-            write::{write_key}
+            }
         },
         ak_run::{activate,
             close_all_ahk,
@@ -66,11 +63,10 @@ fn main() {
             dark_hours
         },
     };
-    use std::{path::{PathBuf}, sync::mpsc, ptr, panic, time::{Instant, Duration}};
+    use std::{path::{PathBuf}, sync::mpsc, panic, time::{Instant, Duration}};
     use tray_item::TrayItem;
-    use winapi::um::{winuser::{GetMessageW, TranslateMessage, DispatchMessageW, GetDesktopWindow}, winnt::ProcessorCap};
+    use winapi::um::{winuser::{GetDesktopWindow}};
     use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
-    use wintrap;
     use active_win_pos_rs::get_active_window;
 
     // Initialize Setup
@@ -197,26 +193,23 @@ fn main() {
                 
                 let mut f_keys;
 
-                let mut process_count = -1;
                 let mut running = is_any_process_running(&game_check);
                 let mut change = ftx.send((current_profile.clone(), get_section(current_profile.clone())));
-    
-                let mut start_times = vec![
-                    Instant::now(),
-                    Instant::now()
-                ];
 
-                let mut timers = vec![
-                    start_times[0].elapsed(),
-                    start_times[1].elapsed()
-                ];
+                let number_of_timers = 2;
+                let mut start_times = Vec::new();
+                let mut timers = Vec::new();
+
+                for i in 0..number_of_timers {
+                    start_times.push(Instant::now());
+                    timers.push(start_times[i].elapsed());
+                };
 
                 loop {
                     sleep(250);
-                    timers = vec![
-                        start_times[0].elapsed(),
-                        start_times[1].elapsed()
-                    ];
+                    for i in 0..number_of_timers {
+                        timers.push(start_times[i].elapsed());
+                    };
                     
                     match change.clone() {
                         Ok(_) => (),

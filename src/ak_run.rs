@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 22 Feb 2023 @ 8:26:24                           #
+// Last Modified: Sun, 26 Feb 2023 @ 8:30:05                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -30,8 +30,6 @@ use winapi::{
             GetForegroundWindow,
             SetForegroundWindow,
             WM_CLOSE,
-            SendMessageW,
-            HWND_BROADCAST,
             WM_SYSCOMMAND,
             SC_MONITORPOWER            
         },

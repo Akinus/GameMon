@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Wed, 22 Feb 2023 @ 22:00:58                          #
+// Last Modified: Sun, 26 Feb 2023 @ 8:29:54                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -747,7 +747,7 @@ pub mod read {
 
 pub mod write {
     use crate::{
-        ak_io::read::{get_value, user_idle},
+        ak_io::read::{user_idle},
         ak_utils::{dark_hours, macros::log},
     };
     use std::path::{Path, PathBuf};
@@ -755,7 +755,6 @@ pub mod write {
     use winreg::{
         enums::{
             RegDisposition::{REG_CREATED_NEW_KEY, REG_OPENED_EXISTING_KEY},
-            HKEY_LOCAL_MACHINE,
         },
         RegKey,
     };
