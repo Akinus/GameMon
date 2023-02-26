@@ -16,6 +16,7 @@ codegen-units = 1
 
 [dependencies]
 windows-win = "2.4.1"
+egui = "0.21.0"
 sysinfo = "0.28.0"
 native-dialog = "0.6.3"
 active-win-pos-rs = "0.7.1"

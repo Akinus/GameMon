@@ -3,6 +3,14 @@ script = [
     "TASKKILL /F /IM EventGhost.exe",
     "TASKKILL /F /IM Autostart.exe",
     "TASKKILL /FI \"WINDOWTITLE eq rust_systray_window\"",
+    "TASKKILL /FI \"WINDOWTITLE eq RUST_WINSIG*\""
+]
+
+[tasks.kill_wait]
+script = [
+    "TASKKILL /F /IM EventGhost.exe",
+    "TASKKILL /F /IM Autostart.exe",
+    "TASKKILL /FI \"WINDOWTITLE eq rust_systray_window\"",
     "TASKKILL /FI \"WINDOWTITLE eq RUST_WINSIG*\"",
     "timeout /T 8"
 ]
@@ -46,7 +54,7 @@ dependencies = [
 
 [tasks.standard]
 dependencies = [
-    "kill",
+    "kill_wait",
     "build",
     "move",
     "start-Autostart"
@@ -54,8 +62,8 @@ dependencies = [
 
 [tasks.wait]
 dependencies = [
-    "kill",
+    "kill_wait",
     "build",
-    "wait_move",
+    "move",
     "start-Autostart"
 ]

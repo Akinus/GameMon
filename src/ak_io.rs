@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Mon, 20 Feb 2023 @ 8:18:47                           #
+// Last Modified: Wed, 22 Feb 2023 @ 22:00:58                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -336,7 +336,7 @@ pub mod read {
         let defaults = get_defaults();
         let mut section = get_section("Idle");
 
-        if dark_hours(&section.game_window_name) {
+        if dark_hours() {
             section.open_rgbprofile = defaults.night_hour_orgb_profile;
             section.signal_rgbprofile = defaults.night_hour_srgb_profile;
             section.game_window_name = "Night".to_owned();
@@ -816,11 +816,7 @@ pub mod write {
 
         let _u = user_idle();
 
-        let _n = dark_hours(&get_value(
-            &RegKey::predef(HKEY_LOCAL_MACHINE),
-            "Idle".to_string(),
-            "game_window_name".to_string(),
-        ));
+        let _n = dark_hours();
 
         log!("Running values reset.".to_string(), "w");
     }

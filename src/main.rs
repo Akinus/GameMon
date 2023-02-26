@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Tue, 21 Feb 2023 @ 23:46:20                          #
+// Last Modified: Sun, 26 Feb 2023 @ 6:47:25                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -20,59 +20,60 @@
     ),
     windows_subsystem = "windows",
 )]
+
+use ak_gui::windows::CodeExample;
+
 mod ak_gui;
 mod ak_run;
 mod ak_io;
 mod ak_utils;
-  
-use crate::{ak_gui::windows::
-    {
-        msg_box,
-        main_gui,
-        defaults_gui
-    },
-    ak_io::{logging::initialize_log,
-        read::{filtered_keys,
-            gamemon_value,
-            get_idle,
-            get_section,
-            get_value,
-            Instance,
-            is_any_process_running,
-            reg_check,
-            user_idle
-        },
-        write::{write_key}
-    },
-    ak_run::{activate,
-        close_all_ahk,
-        run_cmd
-    },
-    ak_utils::{
-        macros::{
-            exit_app,
-            log
-        },
-        Cleanup,
-        HKEY,
-        Message,
-        sleep
-    },
-};
-use std::{path::{PathBuf}, sync::mpsc};
-use tray_item::TrayItem;
-use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
-use wintrap;
-use active_win_pos_rs::get_active_window;
 
 #[cfg(windows)]
 fn main() {
+    
+    use crate::{ak_gui::windows::
+        {
+            msg_box,
+            main_gui,
+            defaults_gui
+        },
+        ak_io::{logging::initialize_log,
+            read::{filtered_keys,
+                gamemon_value,
+                get_idle,
+                get_section,
+                get_value,
+                Instance,
+                is_any_process_running,
+                reg_check,
+                user_idle
+            },
+            write::{write_key}
+        },
+        ak_run::{activate,
+            close_all_ahk,
+            run_cmd, power_monitors
+        },
+        ak_utils::{
+            macros::{
+                exit_app,
+                log
+            },
+            Cleanup,
+            HKEY,
+            Message,
+            sleep,
+            dark_hours
+        },
+    };
+    use std::{path::{PathBuf}, sync::mpsc, ptr, panic, time::{Instant, Duration}};
+    use tray_item::TrayItem;
+    use winapi::um::{winuser::{GetMessageW, TranslateMessage, DispatchMessageW, GetDesktopWindow}, winnt::ProcessorCap};
+    use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
+    use wintrap;
+    use active_win_pos_rs::get_active_window;
+
     // Initialize Setup
-
-    use std::panic;
-
-    use winapi::um::{winuser::GetDesktopWindow, winnt::ProcessorCap};
-
     reg_check(HKEY);
     initialize_log(HKEY);
     let _cleanup = Cleanup;
@@ -200,9 +201,23 @@ fn main() {
                 let mut running = is_any_process_running(&game_check);
                 let mut change = ftx.send((current_profile.clone(), get_section(current_profile.clone())));
     
+                let mut start_times = vec![
+                    Instant::now(),
+                    Instant::now()
+                ];
+
+                let mut timers = vec![
+                    start_times[0].elapsed(),
+                    start_times[1].elapsed()
+                ];
+
                 loop {
                     sleep(250);
-                    process_count += 1;
+                    timers = vec![
+                        start_times[0].elapsed(),
+                        start_times[1].elapsed()
+                    ];
+                    
                     match change.clone() {
                         Ok(_) => (),
                         Err(send_error) => {
@@ -242,14 +257,28 @@ fn main() {
 
                     if user_idle() {
                         if &current_profile == "Idle" {
-                            if gamemon_value(HKEY, "night") == "true" && gamemon_value(HKEY, "display") == "on"{
-                                let idle = get_idle();
-                                change = ftx.send(("Idle".to_string(), idle));
-                                confirm_rx.recv().unwrap();
-                            } else if gamemon_value(HKEY, "night") == "false" && gamemon_value(HKEY, "display") == "off" {
-                                let idle = get_idle();
-                                change = ftx.send(("Idle".to_string(), idle));
-                                confirm_rx.recv().unwrap();
+                            if dark_hours(){
+                                if timers[0] > Duration::from_secs(8){
+                                    power_monitors(false);
+                                    start_times[0] = Instant::now();
+                                }
+
+                                if gamemon_value(HKEY, "display") == "on"{
+                                    let idle = get_idle();
+                                    change = ftx.send(("Idle".to_string(), idle));
+                                    confirm_rx.recv().unwrap();
+                                }
+                            } else {
+                                if timers[0] > Duration::from_secs(8){
+                                    power_monitors(true);
+                                    start_times[0] = Instant::now();
+                                }
+
+                                if gamemon_value(HKEY, "display") == "off" {
+                                    let idle = get_idle();
+                                    change = ftx.send(("Idle".to_string(), idle));
+                                    confirm_rx.recv().unwrap();
+                                }
                             }
                             continue;
                         } else if get_value(HKEY, &current_profile, "game_or_win") != "Game" {
@@ -258,12 +287,13 @@ fn main() {
                             confirm_rx.recv().unwrap();
                         }
                         continue;
-                    } 
-                    
-                    if process_count > 4 {
-                        running = is_any_process_running(&game_check);
-                        process_count = 0;
                     }
+
+                    if timers[1] > Duration::from_secs(4){
+                        running = is_any_process_running(&game_check);
+                        start_times[1] = Instant::now();
+                    }
+                    
                     current_priority = gamemon_value(HKEY, "current_priority").to_owned();
 
                     if running.0 {
@@ -361,8 +391,9 @@ fn main() {
 //************************************************************ */
 // *********************** TESTS ****************************
 //************************************************************ */
-// #[test]
-// fn test(){
+#[test]
+fn test(){
+}
 //     use winsafe;
 //     use sysinfo::{Pid, PidExt, System, SystemExt, Process, ProcessExt};
 //     let process_names: HashSet<String> = ["notepad.exe", "calc.exe"].iter().map(|s| s.to_string()).collect();

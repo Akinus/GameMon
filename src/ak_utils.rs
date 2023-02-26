@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:41:23                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Mon, 20 Feb 2023 @ 8:15:05                           #
+// Last Modified: Wed, 22 Feb 2023 @ 22:07:53                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -18,6 +18,7 @@ use chrono::NaiveTime;
 use winreg::enums::HKEY_LOCAL_MACHINE;
 use winreg::RegKey;
 
+use crate::ak_io::read::get_value;
 use crate::ak_io::write::reg_write_value;
 use crate::ak_run::close_all_ahk;
 use crate::ak_utils::macros::exit_app;
@@ -28,7 +29,8 @@ pub fn sleep(milliseconds: u64) {
     std::thread::sleep(mills);
 }
 
-pub fn dark_hours(time_range: &String) -> bool {
+pub fn dark_hours() -> bool {
+    let time_range = get_value(HKEY, "Idle", "game_window_name");
     let start_hour = time_range[0..2].parse().unwrap();
     let start_minute = time_range[2..4].parse().unwrap();
     let end_hour = time_range[5..7].parse::<u32>().unwrap();
