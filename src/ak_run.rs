@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 26 Feb 2023 @ 8:30:05                           #
+// Last Modified: Wed, 08 Mar 2023 @ 18:45:11                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -169,42 +169,42 @@ where
                 log_text.push_str(&change_signal_rgb(&sp));
                 log_text.push_str("\n\n");
             })
+        },
+        {
+            let sec_clone = sec.clone();
+            let cp = section.priority.clone();
+            std::thread::spawn(move || {
+
+                // Change current priority
+                let _p = reg_write_value(
+                    &RegKey::predef(HKEY_LOCAL_MACHINE),
+                    &Path::new("Software").join("GameMon"),
+                    "current_priority".to_string(),
+                    cp,
+                );
+
+                // change current profile
+                let _v = reg_write_value(
+                    &RegKey::predef(HKEY_LOCAL_MACHINE),
+                    &Path::new("Software").join("GameMon"),
+                    "current_profile".to_string(),
+                    sec_clone.clone(),
+                );
+
+                // change current profile activated
+                let _v = reg_write_value(
+                    &RegKey::predef(HKEY_LOCAL_MACHINE),
+                    &Path::new("Software").join("GameMon"),
+                    "current_profile_activated".to_string(),
+                    sec_clone.clone(),
+                );
+            })  
         }
     ];
-
+    
     for h in handles {
         h.join().unwrap();
     }
-
-    let sec_clone = sec.clone();
-    let cp = section.priority.clone();
-    std::thread::spawn(move || {
-
-        // Change current priority
-        let _p = reg_write_value(
-            &RegKey::predef(HKEY_LOCAL_MACHINE),
-            &Path::new("Software").join("GameMon"),
-            "current_priority".to_string(),
-            cp,
-        );
-
-        // change current profile
-        let _v = reg_write_value(
-            &RegKey::predef(HKEY_LOCAL_MACHINE),
-            &Path::new("Software").join("GameMon"),
-            "current_profile".to_string(),
-            sec_clone.clone(),
-        );
-
-        // change current profile activated
-        let _v = reg_write_value(
-            &RegKey::predef(HKEY_LOCAL_MACHINE),
-            &Path::new("Software").join("GameMon"),
-            "current_profile_activated".to_string(),
-            sec_clone.clone(),
-        );
-    }).join().unwrap();
-    
 
     // Log
     log!(format!("{}", log_text.lock().unwrap()));
@@ -733,37 +733,47 @@ pub fn run_screensaver() -> String {
                 }
             }
             _ => {
-                let _ = Command::new(&ss_exe)
+                let run = Command::new(&ss_exe)
                     .arg("/S")
                     .creation_flags(CREATE_NO_WINDOW)
                     .output()
                 ;
-    
-                let mut found;
-                for _ in 0..4 {
-                    'run_ss: for _ in 0..5 {
-                        if !user_idle(){break 'run_ss};
-                        sleep(1000);
-                        if user_idle() {
-                            found = match get_pid(&ss_exe) {
-                                Ok(_) => true,
-                                _ => false,
-                            };
-                            if !found {
-                                let _ = Command::new(&ss_exe)
-                                    .arg("/S")
-                                    .creation_flags(CREATE_NO_WINDOW)
-                                    .output();
-                                output_str.push_str(&format!(
-                                    "Screensaver not found...initiating screensaver: {}\n",
-                                    &ss_exe
-                                ));
-                            }
-                        } else {
-                            continue;
-                        }
+                
+                match run {
+                    Ok(o) => {
+                        output_str.push_str(&format!("Running Screensaver:\n\tstdin: {}\n\tstdout: {:?}\n\tstderr: {:?}\n", &ss_exe, o.stdout, o.stderr));
                     }
+                    Err(e) => output_str.push_str(&format!(
+                        "Could not run {}: {}\n",
+                        &ss_exe, e
+                    )),
                 }
+    
+                // let mut found;
+                // for _ in 0..4 {
+                //     'run_ss: for _ in 0..5 {
+                //         if !user_idle(){break 'run_ss};
+                //         if user_idle() {
+                //             found = match get_pid(&ss_exe) {
+                //                 Ok(_) => true,
+                //                 _ => false,
+                //             };
+                //             if !found {
+                        
+                //                 let _ = Command::new(&ss_exe)
+                //                     .arg("/S")
+                //                     .creation_flags(CREATE_NO_WINDOW)
+                //                     .output();
+                //                 output_str.push_str(&format!(
+                //                     "Screensaver not found...initiating screensaver: {}\n",
+                //                     &ss_exe
+                //                 ));
+                //             }
+                //         } else {
+                //             continue;
+                //         }
+                //     }
+                // }
             }
         };
     };

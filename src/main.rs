@@ -5,7 +5,7 @@
 // Created Date: Mon, 12 Sep 2022 @ 20:09:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 26 Feb 2023 @ 8:29:25                           #
+// Last Modified: Sun, 26 Feb 2023 @ 9:40:48                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -196,20 +196,19 @@ fn main() {
                 let mut running = is_any_process_running(&game_check);
                 let mut change = ftx.send((current_profile.clone(), get_section(current_profile.clone())));
 
-                let number_of_timers = 2;
-                let mut start_times = Vec::new();
-                let mut timers = Vec::new();
+                let mut start_times = vec![
+                    Instant::now(),
+                    Instant::now()
+                ];
 
-                for i in 0..number_of_timers {
-                    start_times.push(Instant::now());
-                    timers.push(start_times[i].elapsed());
-                };
+                let mut timers;
 
                 loop {
                     sleep(250);
-                    for i in 0..number_of_timers {
-                        timers.push(start_times[i].elapsed());
-                    };
+                    timers = vec![
+                        start_times[0].elapsed(),
+                        start_times[1].elapsed()
+                    ];
                     
                     match change.clone() {
                         Ok(_) => (),
