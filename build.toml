@@ -1,0 +1,69 @@
+[tasks.kill]
+script = [
+    "TASKKILL /F /IM EventGhost.exe",
+    "TASKKILL /F /IM Autostart.exe",
+    "TASKKILL /FI \"WINDOWTITLE eq rust_systray_window\"",
+    "TASKKILL /FI \"WINDOWTITLE eq RUST_WINSIG*\""
+]
+
+[tasks.kill_wait]
+script = [
+    "TASKKILL /F /IM EventGhost.exe",
+    "TASKKILL /F /IM Autostart.exe",
+    "TASKKILL /FI \"WINDOWTITLE eq rust_systray_window\"",
+    "TASKKILL /FI \"WINDOWTITLE eq RUST_WINSIG*\"",
+    "timeout /T 8"
+]
+
+[tasks.clean]
+command = "cargo"
+args = ["clean"]
+
+[tasks.build]
+command = "cargo"
+args =["build", "--release"]
+
+[tasks.wait_move]
+script = [
+    "timeout /T 8",
+    "copy /Y D:\\OneDrive\\Documents\\Miscellaneous\\Projects\\Rust\\GameMon\\target\\release\\GameMon.exe D:\\OneDrive\\Documents\\Miscellaneous\\Programs\\GameMon\\GameMon.exe"
+]
+
+[tasks.move]
+script = [
+    "copy /Y D:\\OneDrive\\Documents\\Miscellaneous\\Projects\\Rust\\GameMon\\target\\release\\GameMon.exe D:\\OneDrive\\Documents\\Miscellaneous\\Programs\\GameMon\\GameMon.exe"
+]
+
+[tasks.start-Autostart]
+script = "start /B d:\\OneDrive\\Documents\\Miscellaneous\\Programs\\Autostart\\Autostart.exe"
+
+[tasks.fresh]
+dependencies = [
+    "kill",
+    "clean",
+    "build",
+    "move",
+    "start-Autostart"
+]
+
+[tasks.just_build]
+dependencies = [
+    "build",
+    "move"
+]
+
+[tasks.standard]
+dependencies = [
+    "kill_wait",
+    "build",
+    "move",
+    "start-Autostart"
+]
+
+[tasks.wait]
+dependencies = [
+    "kill_wait",
+    "build",
+    "move",
+    "start-Autostart"
+]

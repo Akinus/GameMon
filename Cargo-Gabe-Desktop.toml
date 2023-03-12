@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 build = "build.rs"
 
+[scripts]
+pre-build = "scripts/pre-build.bat"
+post-build = "scripts/post-build.bat"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
@@ -12,28 +16,28 @@ codegen-units = 1
 
 [dependencies]
 windows-win = "2.4.1"
-sysinfo = "0.28.2"
+egui = "0.21.0"
+sysinfo = "0.28.0"
 native-dialog = "0.6.3"
-active-win-pos-rs = "0.7.0"
-chrono = "0.4.22"
+active-win-pos-rs = "0.7.1"
+chrono = "0.4.23"
 tray-item = "0.7.1"
-winreg = "0.11"
-winsafe = { version = "0.0.14", features = ["gui", "user"] }
+winreg = "0.11.0"
+winsafe = { version = "0.0.13", features = ["gui", "user"] }
 quoted-string = "0.6.1"
-ureq = "2.5.0"
+ureq = "2.6.2"
 winapi = "0.3.9"
-log = "*"
-eventlog = "*"
-mouse-rs = "0.4.2"
+log = "0.4.17"
+eventlog = "0.2.2"
 msgbox = "0.7.0"
-crossbeam = "0.8.2"
 widestring = "1.0.2"
 winit = "0.28.1"
 wintrap = "0.3.1"
+record-audio = "0.1.1"
 
 [build-dependencies]
-windres = "*"
-winres = "0.1"
+windres = "0.2.2"
+winres = "0.1.12"
 
 [features]
 console = []
