@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 12 Mar 2023 @ 12:05:19                          #
+// Last Modified: Sun, 12 Mar 2023 @ 20:44:04                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -90,47 +90,14 @@ where
     let handles = vec![
         {
             let oc = (sec.clone(), section.other_commands.clone());
-            let section = section.clone();
-            let sec = sec.clone();
             let lt = log_text.clone();
             std::thread::spawn(move || {
                 let mut log_text = lt.lock().unwrap();
+                
                 // Run all other commands
                 if !oc.1.is_empty() {
-                    log_text.push_str("\n_____ Running Other Commands _____\n");
                     log_text.push_str(&run_other_commands(oc));
                 };
-                
-                if sec == "Idle" {
-                    log_text.push_str("\n_____ Idle Special Settings _____\n");
-                    if section.game_window_name == "Night" {
-                        log_text.push_str(&format!("Idle detected during night hours.\n"));
-                        if gamemon_value(HKEY, "display") == "on" && user_idle()
-                        {
-                            log_text.push_str(&format!("Turning monitors off.{}\n", &power_monitors(false)));
-                        }
-                    } else {
-                        log_text.push_str(&format!("Idle detected during day hours.\n"));
-                        if gamemon_value(HKEY, "display") == "off" && user_idle()
-                        {
-                            log_text.push_str(&format!("Turning monitors on.{}\n", &power_monitors(true)));
-                        }
-
-                        if section.game_or_win == "Yes" && user_idle(){
-                            reg_write_value(
-                                &RegKey::predef(HKEY_CURRENT_USER),
-                                &Path::new("Control Panel").join("Desktop"),
-                                "ScreenSaveActive".to_string(),
-                                "0".to_string()).unwrap()
-                            ;
-                            log_text.push_str(&format!("Activating Screensaver...\n"));
-                            log_text.push_str(&run_screensaver());
-                            log_text.push_str("\n");
-                        }
-                    }
-                    log_text.push_str("\n");
-                }
-                
             })
         },
         {
@@ -202,15 +169,57 @@ where
                     sec_clone.clone(),
                 );
             })  
+        },
+        {
+            let section = section.clone();
+            let sec = sec.clone();
+            let lt = log_text.clone();
+            std::thread::spawn(move || {
+                let mut log_text = lt.lock().unwrap();
+                
+                if sec == "Idle" {
+                    log_text.push_str("\n_____ Idle Special Settings _____\n");
+                    if section.game_window_name == "Night" {
+                        log_text.push_str(&format!("Idle detected during night hours.\n"));
+                        if gamemon_value(HKEY, "display") == "on" && user_idle()
+                        {
+                            log_text.push_str(&format!("Turning monitors off.{}\n", &power_monitors(false)));
+                        }
+                    } else {
+                        log_text.push_str(&format!("Idle detected during day hours.\n"));
+                        if gamemon_value(HKEY, "display") == "off" && user_idle()
+                        {
+                            log_text.push_str(&format!("Turning monitors on.{}\n", &power_monitors(true)));
+                        }
+
+                        if section.game_or_win == "Yes" && user_idle(){
+                            reg_write_value(
+                                &RegKey::predef(HKEY_CURRENT_USER),
+                                &Path::new("Control Panel").join("Desktop"),
+                                "ScreenSaveActive".to_string(),
+                                "0".to_string()).unwrap()
+                            ;
+                            log_text.push_str(&format!("Activating Screensaver...\n"));
+                            log_text.push_str(&run_screensaver());
+                            log_text.push_str("\n");
+                        }
+                    }
+                    log_text.push_str("\n");
+                }
+            })
         }
     ];
-    
-    for h in handles {
-        h.join().unwrap();
-    }
 
-    // Log
-    log!(format!("{}", log_text.lock().unwrap()));
+    let lt = log_text.clone();
+    std::thread::spawn(move || {
+        for h in handles {
+            h.join().unwrap();
+        };
+
+        // Log
+        log!(format!("{}", lt.lock().unwrap()));
+    });
+    
 }
 
 pub fn deactivate<T>(instruction: T) -> String
@@ -691,7 +700,7 @@ pub fn power_monitors(on_off: bool) -> String {
 }
 
 pub fn run_screensaver() -> String {
-    sleep(10000);
+    sleep(2500);
     let ss_exe = ss_get("SCRNSAVE.EXE").to_owned();
     let mut output_str = String::new();
 
@@ -739,7 +748,7 @@ pub fn run_screensaver() -> String {
                 let run = Command::new(&ss_exe)
                     .arg("/S")
                     .creation_flags(CREATE_NO_WINDOW)
-                    .output()
+                    .spawn()
                 ;
                 
                 match run {
@@ -752,31 +761,6 @@ pub fn run_screensaver() -> String {
                     )),
                 }
     
-                // let mut found;
-                // for _ in 0..4 {
-                //     'run_ss: for _ in 0..5 {
-                //         if !user_idle(){break 'run_ss};
-                //         if user_idle() {
-                //             found = match get_pid(&ss_exe) {
-                //                 Ok(_) => true,
-                //                 _ => false,
-                //             };
-                //             if !found {
-                        
-                //                 let _ = Command::new(&ss_exe)
-                //                     .arg("/S")
-                //                     .creation_flags(CREATE_NO_WINDOW)
-                //                     .output();
-                //                 output_str.push_str(&format!(
-                //                     "Screensaver not found...initiating screensaver: {}\n",
-                //                     &ss_exe
-                //                 ));
-                //             }
-                //         } else {
-                //             continue;
-                //         }
-                //     }
-                // }
             }
         };
     };
@@ -790,6 +774,7 @@ pub fn run_other_commands<T, U>(section_and_commands: (T, U)) -> String
 
     let section = section_and_commands.0.to_string();
     let other_commands = section_and_commands.1.to_string();
+    let mut return_string = String::new();
 
     if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "last_other_commands") == section {
         return "".to_string();
@@ -859,46 +844,34 @@ pub fn run_other_commands<T, U>(section_and_commands: (T, U)) -> String
     let cloned_log_text = log_text.clone();
 
     'command_loop: for c in collection {
-        let new_sec = section.clone();
         let lt = log_text.clone();
         let newc = c.clone();
-        if new_sec == "Idle" {
-            if !user_idle() {
-                let mut log_text = lt.lock().unwrap();
-                log_text.push_str("User is no longer idle...");
-                break 'command_loop;
-            }
-        };
         std::thread::spawn(move || {
             let mut log_text = lt.lock().unwrap();
-            let output = Command::new("cmd.exe")
+            let cmd = Command::new("cmd.exe")
                 .creation_flags(CREATE_NO_WINDOW)
                 .arg("/c")
                 .raw_arg(&newc)
-                .spawn();
-            log_text.push_str(&match output {
-                Ok(mut o) => {
-                    let status = o.wait().unwrap().code().unwrap();
-                    match status{
-                        0 => format!("\n--------------------\n{}\nSUCCESS!\nstdin: {:?}\nstdout: {:?}\nstderr: {:?}\n"
-                                    , &newc
-                                    , o.stdin
-                                    , o.stdout
-                                    , o.stderr
-                                ),
-                        _ => format!("\n--------------------\n{}\nERROR!\nstdin: {:?}\nstdout: {:?}\nstderr: {:?}\n"
-                                    , &newc
-                                    , o.stdin
-                                    , o.stdout
-                                    , o.stderr
-                                ),
-                    }
+                .output();
+            log_text.push_str(&match cmd {
+                Ok(mut output) => {
+                    format!("\n--------------------\n{}\nSUCCESS!\nstdout: {:?}\nstderr: {:?}\n"
+                        , &newc
+                        , String::from_utf8_lossy(&output.stdout)
+                        , String::from_utf8_lossy(&output.stderr)
+                    )   
                 },
-                Err(e) => format!("Could not run {}: {e}\n", &newc)
+                Err(e) => {
+                    format!("\n--------------------\n{}\nERROR!\nstderr: {:?}\n"
+                        , &newc
+                        , e
+                    )
+                }
             });
         });
     }
 
-    let x = cloned_log_text.lock().unwrap().clone();
-    x
+    log!(&cloned_log_text.lock().unwrap().clone(), "d");
+    return_string.push_str(&cloned_log_text.lock().unwrap().clone());
+    return_string
 }
