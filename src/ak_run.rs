@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 12 Mar 2023 @ 20:44:04                          #
+// Last Modified: Sun, 12 Mar 2023 @ 20:59:10                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -210,15 +210,13 @@ where
         }
     ];
 
-    let lt = log_text.clone();
-    std::thread::spawn(move || {
-        for h in handles {
-            h.join().unwrap();
-        };
+    
+    for h in handles {
+        h.join().unwrap();
+    };
 
-        // Log
-        log!(format!("{}", lt.lock().unwrap()));
-    });
+    // Log
+    log!(format!("{}", log_text.lock().unwrap()));
     
 }
 
@@ -774,6 +772,7 @@ pub fn run_other_commands<T, U>(section_and_commands: (T, U)) -> String
 
     let section = section_and_commands.0.to_string();
     let other_commands = section_and_commands.1.to_string();
+    let mut thread_vec = Vec::new();
     let mut return_string = String::new();
 
     if gamemon_value(&RegKey::predef(HKEY_LOCAL_MACHINE), "last_other_commands") == section {
@@ -843,10 +842,10 @@ pub fn run_other_commands<T, U>(section_and_commands: (T, U)) -> String
     };
     let cloned_log_text = log_text.clone();
 
-    'command_loop: for c in collection {
+    for c in collection {
         let lt = log_text.clone();
         let newc = c.clone();
-        std::thread::spawn(move || {
+        thread_vec.push(std::thread::spawn(move || {
             let mut log_text = lt.lock().unwrap();
             let cmd = Command::new("cmd.exe")
                 .creation_flags(CREATE_NO_WINDOW)
@@ -854,7 +853,7 @@ pub fn run_other_commands<T, U>(section_and_commands: (T, U)) -> String
                 .raw_arg(&newc)
                 .output();
             log_text.push_str(&match cmd {
-                Ok(mut output) => {
+                Ok(output) => {
                     format!("\n--------------------\n{}\nSUCCESS!\nstdout: {:?}\nstderr: {:?}\n"
                         , &newc
                         , String::from_utf8_lossy(&output.stdout)
@@ -868,10 +867,13 @@ pub fn run_other_commands<T, U>(section_and_commands: (T, U)) -> String
                     )
                 }
             });
-        });
+        }));
     }
 
-    log!(&cloned_log_text.lock().unwrap().clone(), "d");
+    for thread in thread_vec {
+        thread.join().unwrap();
+    }
+    
     return_string.push_str(&cloned_log_text.lock().unwrap().clone());
     return_string
 }
