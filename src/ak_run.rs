@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 12 Mar 2023 @ 20:59:10                          #
+// Last Modified: Mon, 13 Mar 2023 @ 9:31:19                           #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -698,7 +698,7 @@ pub fn power_monitors(on_off: bool) -> String {
 }
 
 pub fn run_screensaver() -> String {
-    sleep(2500);
+    sleep(8500);
     let ss_exe = ss_get("SCRNSAVE.EXE").to_owned();
     let mut output_str = String::new();
 
