@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 12:39:37                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Sun, 26 Feb 2023 @ 8:29:54                           #
+// Last Modified: Mon, 03 Apr 2023 @ 14:25:45                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -702,7 +702,8 @@ pub mod read {
     }
 
     pub fn user_idle() -> bool {
-        let wait_time = get_value(HKEY, "Idle", "exe_name").parse::<u64>().unwrap();
+        let mut wait_time = get_value(HKEY, "Idle", "exe_name").parse::<u64>().unwrap();
+        wait_time = wait_time - 10;
 
         let now = unsafe { winapi::um::sysinfoapi::GetTickCount() };
         let mut last_input_info = LASTINPUTINFO {

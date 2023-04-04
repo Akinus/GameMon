@@ -5,7 +5,7 @@
 // Created Date: Sat, 10 Dec 2022 @ 13:10:15                           #
 // Author: Akinus21                                                    #
 // -----                                                               #
-// Last Modified: Mon, 13 Mar 2023 @ 9:31:19                           #
+// Last Modified: Mon, 03 Apr 2023 @ 14:24:27                          #
 // Modified By: Akinus21                                               #
 // HISTORY:                                                            #
 // Date      	By	Comments                                           #
@@ -277,124 +277,6 @@ where
     //Log
     return format!("{}", log_text);
 }
-
-// pub fn main_check(rx: Receiver<Message>) {
-//     // main_check();
-//     let (exit_tx, exit_rx) = channel::bounded(2);
-//     let mut enum_keys;
-//     enum_keys = RegKey::predef(HKEY_LOCAL_MACHINE)
-//         .open_subkey(&PathBuf::from("Software").join("GameMon"))
-//         .unwrap()
-//         .enum_keys()
-//         .map(|x| {
-//             let y = x.unwrap().clone();
-//             let z = y.clone();
-//             (z, get_section(y))
-//         })
-//         .filter(|entry| {
-//             entry.0 != "Idle".to_string() && entry.0 != "General" && entry.0 != "defaults"
-//         })
-//         .collect::<Vec<(String, Instance)>>();
-//     let mut current_profile = gamemon_value(HKEY, "current_profile").to_owned();
-//     let mut current_priority = gamemon_value(HKEY, "current_priority").to_owned();
-
-//     let mut count = 0;
-
-//     let mut window_handle = get_by_title("rust_systray_window", None).unwrap();
-
-//     if user_idle() {
-//         if &current_profile != "Idle" {
-//             let idle = get_idle();
-//             current_priority = idle.priority.clone();
-//             deactivate(&current_profile);
-//             activate(("Idle", idle));
-//             current_profile = "Idle".to_string();
-//         }
-//         return;
-//     }
-
-//     let f_keys = filtered_keys(enum_keys.clone(), &current_profile, &current_priority);
-//     if f_keys.len() > 0 {
-//         for (sec, section) in &f_keys {
-//             if sec != &current_profile {
-//                 deactivate(&current_profile);
-//                 current_priority = section.priority.clone();
-//                 activate((&sec, section.clone()));
-//                 current_profile = sec.clone();
-//             }
-//         }
-//     } else {
-//         if &current_profile != "General" {
-//             deactivate(&current_profile);
-//             let general = get_section("General");
-//             current_priority = general.priority.clone();
-//             activate(("General", general));
-//             current_profile = "General".to_string();
-//         }
-//     }
-
-//     for h in &window_handle {
-//         if !h.is_null() {
-//             let _ = msg_box("", format!("{:?}", window_handle), 1500);
-
-//             // let _ = msg_box("", format!("{:?}\n{}", h, msg.unwrap().message), 1500);
-//             // match msg.unwrap().message {
-//             //     WM_CLOSE => exit_tx.send(WM_CLOSE).unwrap(),
-//             //     WM_QUIT => exit_tx.send(WM_QUIT).unwrap(),
-//             //     WM_DESTROY => exit_tx.send(WM_DESTROY).unwrap(),
-//             //     WM_ENDSESSION => exit_tx.send(WM_ENDSESSION).unwrap(),
-//             //     _ => ()
-//             // }
-//         } else {
-//             let _ = msg_box("", "NULL!!!!!", 1500);
-//         };
-//     }
-
-//     match rx.try_recv() {
-//         Ok(Message::Quit) => {
-//             exit_tx.send(1).unwrap();
-//         }
-//         Ok(Message::Gui) => {
-//             scope(|s| {
-//                 s.spawn(|_| main_gui());
-//             })
-//             .unwrap();
-//         }
-//         Ok(Message::Defaults) => {
-//             scope(|s| {
-//                 s.spawn(|_| defaults_gui());
-//             })
-//             .unwrap();
-//         }
-//         Ok(Message::Logs) => {
-//             let _z = run_cmd(&"eventvwr.msc".to_string()).unwrap();
-//         }
-//         Err(_) => (),
-//     };
-
-//     match exit_rx.try_recv() {
-//         Ok(0) => {
-//             exit_app!(0, "Memory allocation too high!!");
-//         }
-//         Ok(1) => {
-//             exit_app!(1, "Menu");
-//         }
-//         Ok(WM_CLOSE) => {
-//             exit_app!(1, "Window Messsage: WM_CLOSE");
-//         }
-//         Ok(WM_QUIT) => {
-//             exit_app!(1, "Window Messsage: WM_QUIT");
-//         }
-//         Ok(WM_DESTROY) => {
-//             exit_app!(1, "Window Messsage: WM_DESTROY");
-//         }
-//         Ok(WM_ENDSESSION) => {
-//             exit_app!(1, "Window Messsage: WM_ENDSESSION");
-//         }
-//         Ok(_) => (),
-//         Err(_) => (),
-//     }
-// }
 
 pub fn close_all_ahk() -> Result<(), String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
@@ -698,7 +580,7 @@ pub fn power_monitors(on_off: bool) -> String {
 }
 
 pub fn run_screensaver() -> String {
-    sleep(8500);
+    sleep(10000);
     let ss_exe = ss_get("SCRNSAVE.EXE").to_owned();
     let mut output_str = String::new();
 
